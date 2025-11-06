@@ -6,145 +6,123 @@
   <title>Mark Attendance</title>
 
   <script type="module">
+    // ===== Firebase SDK Imports =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-    import {
-      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp
-    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-    // ====== Firebase Config ======
-    // NOTE: storageBucket usually ends with ".appspot.com"
+    // ===== Your Firebase Configuration =====
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
       projectId: "attendace-9d237",
-      storageBucket: "attendace-9d237.appspot.com",
+      storageBucket: "attendace-9d237.firebasestorage.app",
       messagingSenderId: "248211930711",
       appId: "1:248211930711:web:88e178f5d0323e88966d12"
     };
 
-    // Init Firebase / Firestore
-    let db;
-    try {
-      const app = initializeApp(firebaseConfig);
-      db = getFirestore(app);
-      console.log("Firebase initialized (projectId):", firebaseConfig.projectId);
-    } catch (err) {
-      console.error("Firebase init error:", err);
-      document.addEventListener("DOMContentLoaded", () => {
-        showMsg("❌ Firebase initialization error: " + (err.message || err), "error");
-      });
+    // ===== Initialize Firebase & Firestore =====
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ===== Attendance Form Logic =====
+    async function submitAttendance(e) {
+      e.preventDefault();
+
+      const name = document.getElementById("fullName").value.trim();
+      const role = document.getElementById("role").value;
+      const submitBtn = document.getElementById("submitBtn");
+      const msg = document.getElementById("message");
+
+      if (!name) {
+        msg.textContent = "Please enter your full name.";
+        msg.style.color = "red";
+        return;
+      }
+
+      submitBtn.disabled = true;
+      msg.textContent = "Submitting...";
+      msg.style.color = "#333";
+
+      try {
+        await addDoc(collection(db, "attendance"), {
+          name,
+          role,
+          timestamp: serverTimestamp()
+        });
+
+        msg.textContent = "✅ Attendance marked successfully!";
+        msg.style.color = "green";
+        document.getElementById("attendanceForm").reset();
+      } catch (error) {
+        console.error("Error:", error);
+        msg.textContent = "❌ Error submitting attendance.";
+        msg.style.color = "red";
+      } finally {
+        submitBtn.disabled = false;
+      }
     }
 
-    // ====== Helpers ======
-    function showMsg(msg, type = "info") {
-      const el = document.getElementById("statusMsg");
-      el.textContent = msg;
-      el.className = "msg " + (type === "error" ? "error" : type === "success" ? "success" : "warn");
-      el.style.display = "block";
-      if (type === "error") console.error(msg);
-    }
-
-    // ====== Submit Attendance (with robust duplicate check) ======
-    document.addEventListener("DOMContentLoaded", () => {
-      const form = document.getElementById("attendanceForm");
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        document.getElementById("statusMsg").style.display = "none";
-
-        if (!db) {
-          showMsg("❌ Not connected to Firestore. Check initialization (see console).", "error");
-          return;
-        }
-
-        const name = document.getElementById("name").value.trim();
-        const role = document.getElementById("role").value;
-        const className = document.getElementById("class").value.trim();
-
-        if (!name) {
-          showMsg("⚠️ Please enter your full name.", "error");
-          return;
-        }
-
-        // start/end of today in local timezone
-        const startOfDay = new Date();
-        startOfDay.setHours(0,0,0,0);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setHours(23,59,59,999);
-
-        try {
-          // Query documents with same name AND timestamp in today range
-          const q = query(
-            collection(db, "attendance"),
-            where("name", "==", name),
-            where("timestamp", ">=", startOfDay),
-            where("timestamp", "<=", endOfDay)
-          );
-
-          const snapshot = await getDocs(q);
-
-          if (!snapshot.empty) {
-            showMsg("🔁 You’ve already marked attendance for today!", "warn");
-            return;
-          }
-
-          // Save attendance (server timestamp)
-          await addDoc(collection(db, "attendance"), {
-            name,
-            role,
-            class: className || "—",
-            timestamp: serverTimestamp()
-          });
-
-          showMsg("✅ Attendance marked successfully!", "success");
-          form.reset();
-        } catch (err) {
-          // Show real error message (helpful for debugging)
-          const msg = err?.message || String(err);
-          showMsg("❌ Something went wrong: " + msg, "error");
-          console.error("Add attendance error:", err);
-        }
-      });
-    });
+    window.submitAttendance = submitAttendance;
   </script>
 
   <style>
     body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: #f4f7f9;
-      color: #333;
+      font-family: Arial, sans-serif;
+      background: #f7f7f7;
       padding: 30px;
       text-align: center;
     }
-    h1 { color: #0078d7; margin-bottom: 20px; }
     form {
-      background: white; padding: 25px; border-radius: 12px;
-      max-width: 420px; margin: auto; box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      background: white;
+      padding: 20px;
+      margin: auto;
+      width: 90%;
+      max-width: 400px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    input, select, button { width: 100%; padding: 10px; margin-top: 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 15px; }
-    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
-    button:hover { background: #005fa3; }
-    .msg { margin-top: 15px; padding: 10px; border-radius: 6px; font-weight: bold; display: none; }
-    .msg.success { background: #d1f7c4; color: #0c6b09; }
-    .msg.error { background: #ffd6d6; color: #b10000; }
-    .msg.warn { background: #fff3cd; color: #856404; }
-    p.hint { color:#666; font-size:13px; margin-top:18px; }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    h1 {
+      color: #222;
+    }
+    #message {
+      margin-top: 15px;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
   <h1>📋 Mark Your Attendance</h1>
 
-  <form id="attendanceForm">
-    <input type="text" id="name" placeholder="Full Name" required />
+  <form id="attendanceForm" onsubmit="submitAttendance(event)">
+    <input type="text" id="fullName" placeholder="Enter Full Name" required />
+    
     <select id="role" required>
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
-    <input type="text" id="class" placeholder="Class (optional)" />
-    <button type="submit">Submit Attendance</button>
-    <div id="statusMsg" class="msg"></div>
-  </form>
 
-  <p class="hint">Open developer console (F12 → Console) if you see an error. If using local files, run a simple server (e.g., VSCode Live Server).</p>
+    <button id="submitBtn" type="submit">Submit</button>
+    <p id="message"></p>
+  </form>
 </body>
 </html>
