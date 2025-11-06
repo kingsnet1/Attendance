@@ -1,73 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mark Attendance</title>
+
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { 
-      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp 
-    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import {
+      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
     // ====== Firebase Config ======
+    // NOTE: storageBucket usually ends with ".appspot.com"
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
       projectId: "attendace-9d237",
-      storageBucket: "attendace-9d237.firebasestorage.app",
+      storageBucket: "attendace-9d237.appspot.com",
       messagingSenderId: "248211930711",
       appId: "1:248211930711:web:88e178f5d0323e88966d12"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    // Init Firebase / Firestore
+    let db;
+    try {
+      const app = initializeApp(firebaseConfig);
+      db = getFirestore(app);
+      console.log("Firebase initialized (projectId):", firebaseConfig.projectId);
+    } catch (err) {
+      console.error("Firebase init error:", err);
+      document.addEventListener("DOMContentLoaded", () => {
+        showMsg("❌ Firebase initialization error: " + (err.message || err), "error");
+      });
+    }
 
-    // ====== Submit Attendance ======
+    // ====== Helpers ======
+    function showMsg(msg, type = "info") {
+      const el = document.getElementById("statusMsg");
+      el.textContent = msg;
+      el.className = "msg " + (type === "error" ? "error" : type === "success" ? "success" : "warn");
+      el.style.display = "block";
+      if (type === "error") console.error(msg);
+    }
+
+    // ====== Submit Attendance (with robust duplicate check) ======
     document.addEventListener("DOMContentLoaded", () => {
       const form = document.getElementById("attendanceForm");
-      const statusMsg = document.getElementById("statusMsg");
-
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        document.getElementById("statusMsg").style.display = "none";
+
+        if (!db) {
+          showMsg("❌ Not connected to Firestore. Check initialization (see console).", "error");
+          return;
+        }
 
         const name = document.getElementById("name").value.trim();
         const role = document.getElementById("role").value;
         const className = document.getElementById("class").value.trim();
 
         if (!name) {
-          showMsg("Please enter your name.", "error");
+          showMsg("⚠️ Please enter your full name.", "error");
           return;
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // start/end of today in local timezone
+        const startOfDay = new Date();
+        startOfDay.setHours(0,0,0,0);
+        const endOfDay = new Date(startOfDay);
+        endOfDay.setHours(23,59,59,999);
 
         try {
-          // Check for duplicate attendance (same name + same day)
+          // Query documents with same name AND timestamp in today range
           const q = query(
             collection(db, "attendance"),
-            where("name", "==", name)
+            where("name", "==", name),
+            where("timestamp", ">=", startOfDay),
+            where("timestamp", "<=", endOfDay)
           );
+
           const snapshot = await getDocs(q);
 
-          let alreadyMarked = false;
-          snapshot.forEach((doc) => {
-            const ts = doc.data().timestamp?.toDate();
-            if (ts) {
-              const dateOnly = new Date(ts);
-              dateOnly.setHours(0, 0, 0, 0);
-              if (dateOnly.getTime() === today.getTime()) {
-                alreadyMarked = true;
-              }
-            }
-          });
-
-          if (alreadyMarked) {
+          if (!snapshot.empty) {
             showMsg("🔁 You’ve already marked attendance for today!", "warn");
             return;
           }
 
+          // Save attendance (server timestamp)
           await addDoc(collection(db, "attendance"), {
             name,
             role,
@@ -77,18 +97,13 @@
 
           showMsg("✅ Attendance marked successfully!", "success");
           form.reset();
-
-        } catch (error) {
-          console.error("Error adding attendance: ", error);
-          showMsg("❌ Something went wrong. Try again.", "error");
+        } catch (err) {
+          // Show real error message (helpful for debugging)
+          const msg = err?.message || String(err);
+          showMsg("❌ Something went wrong: " + msg, "error");
+          console.error("Add attendance error:", err);
         }
       });
-
-      function showMsg(msg, type) {
-        statusMsg.textContent = msg;
-        statusMsg.className = `msg ${type}`;
-        statusMsg.style.display = "block";
-      }
     });
   </script>
 
@@ -100,56 +115,19 @@
       padding: 30px;
       text-align: center;
     }
-    h1 {
-      color: #0078d7;
-      margin-bottom: 20px;
-    }
+    h1 { color: #0078d7; margin-bottom: 20px; }
     form {
-      background: white;
-      padding: 25px;
-      border-radius: 12px;
-      max-width: 400px;
-      margin: auto;
-      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      background: white; padding: 25px; border-radius: 12px;
+      max-width: 420px; margin: auto; box-shadow: 0 3px 10px rgba(0,0,0,0.1);
     }
-    input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 12px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 15px;
-    }
-    button {
-      background: #0078d7;
-      color: white;
-      border: none;
-      cursor: pointer;
-      font-weight: bold;
-      transition: background 0.3s;
-    }
-    button:hover {
-      background: #005fa3;
-    }
-    .msg {
-      margin-top: 15px;
-      padding: 10px;
-      border-radius: 6px;
-      font-weight: bold;
-      display: none;
-    }
-    .msg.success {
-      background: #d1f7c4;
-      color: #0c6b09;
-    }
-    .msg.error {
-      background: #ffd6d6;
-      color: #b10000;
-    }
-    .msg.warn {
-      background: #fff3cd;
-      color: #856404;
-    }
+    input, select, button { width: 100%; padding: 10px; margin-top: 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 15px; }
+    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #005fa3; }
+    .msg { margin-top: 15px; padding: 10px; border-radius: 6px; font-weight: bold; display: none; }
+    .msg.success { background: #d1f7c4; color: #0c6b09; }
+    .msg.error { background: #ffd6d6; color: #b10000; }
+    .msg.warn { background: #fff3cd; color: #856404; }
+    p.hint { color:#666; font-size:13px; margin-top:18px; }
   </style>
 </head>
 <body>
@@ -166,5 +144,7 @@
     <button type="submit">Submit Attendance</button>
     <div id="statusMsg" class="msg"></div>
   </form>
+
+  <p class="hint">Open developer console (F12 → Console) if you see an error. If using local files, run a simple server (e.g., VSCode Live Server).</p>
 </body>
 </html>
