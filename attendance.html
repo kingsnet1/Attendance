@@ -30,11 +30,12 @@
 
       const name = document.getElementById("fullName").value.trim();
       const role = document.getElementById("role").value;
+      const className = document.getElementById("className").value;
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
-      if (!name) {
-        msg.textContent = "Please enter your full name.";
+      if (!name || !role || !className) {
+        msg.textContent = "Please fill out all fields.";
         msg.style.color = "red";
         return;
       }
@@ -47,6 +48,7 @@
         await addDoc(collection(db, "attendance"), {
           name,
           role,
+          class: className,
           timestamp: serverTimestamp()
         });
 
@@ -119,6 +121,16 @@
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
+    </select>
+
+    <select id="className" required>
+      <option value="">Select Class</option>
+      <option value="Gen. Science">Gen. Science</option>
+      <option value="Agric Science">Agric Science</option>
+      <option value="Gen. Arts">Gen. Arts</option>
+      <option value="Business">Business</option>
+      <option value="Home Economics">Home Economics</option>
+      <option value="Visual Arts">Visual Arts</option>
     </select>
 
     <button id="submitBtn" type="submit">Submit</button>
