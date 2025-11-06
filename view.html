@@ -12,13 +12,13 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { 
-      getFirestore, collection, onSnapshot, orderBy, query, addDoc, where, getDocs 
+      getFirestore, collection, onSnapshot, orderBy, query, where 
     } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
     import { 
       getAuth, onAuthStateChanged, signOut 
     } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
-    // ====== Firebase Config ======
+    // ===== Firebase Config =====
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
@@ -32,7 +32,9 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // ====== Auth Check ======
+    let allData = [];
+
+    // ===== Auth Check =====
     onAuthStateChanged(auth, (user) => {
       if (!user) {
         window.location.href = "admin.html";
@@ -42,13 +44,12 @@
       }
     });
 
-    // ====== Logout ======
+    // ===== Logout =====
     window.logoutAdmin = function () {
       signOut(auth).then(() => window.location.href = "admin.html");
     };
 
-    // ====== Load Attendance Data ======
-    let allData = [];
+    // ===== Load Attendance =====
     function loadAttendance() {
       const sortOrder = document.getElementById("sortOrder")?.value || "desc";
       const q = query(collection(db, "attendance"), orderBy("timestamp", sortOrder));
@@ -58,16 +59,43 @@
         snapshot.forEach((doc) => {
           allData.push({ id: doc.id, ...doc.data() });
         });
-        renderTable(allData);
-        updateSummary(allData);
-        updateChart(allData);
+        applyFilters();
       });
     }
 
-    // ====== Render Table ======
+    // ===== Apply Filters =====
+    window.applyFilters = function () {
+      let filtered = [...allData];
+
+      // Date range filter
+      const fromDate = document.getElementById("fromDate").value;
+      const toDate = document.getElementById("toDate").value;
+      if (fromDate || toDate) {
+        filtered = filtered.filter(item => {
+          const d = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
+          const dateOnly = d.toISOString().split("T")[0];
+          if (fromDate && dateOnly < fromDate) return false;
+          if (toDate && dateOnly > toDate) return false;
+          return true;
+        });
+      }
+
+      // Role filter
+      const role = document.getElementById("roleFilter").value;
+      if (role) filtered = filtered.filter(i => i.role === role);
+
+      // Class filter
+      const className = document.getElementById("classFilter").value;
+      if (className) filtered = filtered.filter(i => i.class === className);
+
+      renderTable(filtered);
+      updateSummary(filtered);
+      updateChart(filtered);
+    };
+
+    // ===== Render Table =====
     function renderTable(data) {
       const tableBody = document.getElementById("attendanceBody");
-      const countDisplay = document.getElementById("count");
       tableBody.innerHTML = "";
       let count = 0;
 
@@ -76,7 +104,7 @@
         const date = dateObj.toLocaleDateString();
         const time = dateObj.toLocaleTimeString();
         const status = checkLate(dateObj) ? "Late ⏰" : "Present ✅";
-        const row = `
+        tableBody.innerHTML += `
           <tr>
             <td>${++count}</td>
             <td>${item.name}</td>
@@ -86,37 +114,35 @@
             <td>${time}</td>
             <td>${status}</td>
           </tr>`;
-        tableBody.innerHTML += row;
       });
 
-      countDisplay.textContent = count;
+      document.getElementById("count").textContent = count;
     }
 
-    // ====== Check for Lateness ======
+    // ===== Lateness Checker =====
     function checkLate(dateObj) {
       const limit = new Date(dateObj);
-      limit.setHours(8, 15, 0); // 8:15 AM limit
+      limit.setHours(8, 15, 0);
       return dateObj.getHours() > 8 || (dateObj.getHours() === 8 && dateObj.getMinutes() > 15);
     }
 
-    // ====== Search Filter ======
+    // ===== Search =====
     window.filterSearch = function () {
       const term = document.getElementById("searchBox").value.toLowerCase();
       const filtered = allData.filter(d => d.name?.toLowerCase().includes(term));
       renderTable(filtered);
     };
 
-    // ====== Summary Counts ======
+    // ===== Summary =====
     function updateSummary(data) {
       const total = data.length;
       const students = data.filter(d => d.role === "Student").length;
       const teachers = data.filter(d => d.role === "Teacher").length;
-      document.getElementById("count").textContent = total;
       document.getElementById("summary").textContent =
         `Students: ${students} | Teachers: ${teachers}`;
     }
 
-    // ====== Chart ======
+    // ===== Chart =====
     function updateChart(data) {
       const ctx = document.getElementById("attendanceChart").getContext("2d");
       const grouped = {};
@@ -147,40 +173,6 @@
         }
       });
     }
-
-    // ====== Export to CSV ======
-    window.exportToCSV = function () {
-      const rows = [["#", "Full Name", "Role", "Class", "Date", "Time", "Status"]];
-      const trs = document.querySelectorAll("#attendanceBody tr");
-      trs.forEach((tr) => {
-        const cells = Array.from(tr.children).map(td => td.innerText);
-        rows.push(cells);
-      });
-
-      const csvContent = "data:text/csv;charset=utf-8," +
-        rows.map(e => e.join(",")).join("\n");
-
-      const link = document.createElement("a");
-      link.setAttribute("href", encodeURI(csvContent));
-      link.setAttribute("download", "attendance_records.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    };
-
-    // ====== Export to PDF ======
-    window.exportToPDF = async function () {
-      const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.es.min.js");
-      const doc = new jsPDF();
-      doc.text("Attendance Report", 14, 20);
-      let y = 30;
-      allData.forEach((d, i) => {
-        const date = d.timestamp?.toDate().toLocaleDateString();
-        doc.text(`${i + 1}. ${d.name} (${d.role}) - ${date}`, 14, y);
-        y += 8;
-      });
-      doc.save("attendance_report.pdf");
-    };
   </script>
 
   <style>
@@ -196,10 +188,7 @@
       align-items: center;
       margin-bottom: 20px;
     }
-    h1 {
-      margin: 0;
-      color: #0078d7;
-    }
+    h1 { color: #0078d7; }
     button, select, input {
       padding: 8px 14px;
       border-radius: 6px;
@@ -224,23 +213,10 @@
       overflow: hidden;
       box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     }
-    th, td {
-      padding: 12px;
-      border-bottom: 1px solid #ddd;
-    }
-    th {
-      background-color: #0078d7;
-      color: white;
-      cursor: pointer;
-    }
+    th, td { padding: 12px; border-bottom: 1px solid #ddd; }
+    th { background-color: #0078d7; color: white; }
     tr:hover { background: #f9f9f9; }
-    .toolbar {
-      margin-bottom: 15px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
     canvas { margin-top: 30px; background: white; padding: 10px; border-radius: 10px; }
   </style>
 </head>
@@ -254,15 +230,40 @@
   </header>
 
   <div class="toolbar">
-    <label>Search: </label>
+    <label>Search:</label>
     <input id="searchBox" onkeyup="filterSearch()" placeholder="Enter name...">
+
+    <label>From:</label>
+    <input type="date" id="fromDate" onchange="applyFilters()">
+
+    <label>To:</label>
+    <input type="date" id="toDate" onchange="applyFilters()">
+
+    <label>Role:</label>
+    <select id="roleFilter" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Student">Student</option>
+      <option value="Teacher">Teacher</option>
+    </select>
+
+    <label>Class:</label>
+    <select id="classFilter" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Gen. Science">Gen. Science</option>
+      <option value="Agric Science">Agric Science</option>
+      <option value="Gen. Arts">Gen. Arts</option>
+      <option value="Business">Business</option>
+      <option value="Home Economics">Home Economics</option>
+      <option value="Visual Arts">Visual Arts</option>
+    </select>
+
     <label>Sort:</label>
     <select id="sortOrder" onchange="loadAttendance()">
       <option value="desc">Newest First</option>
       <option value="asc">Oldest First</option>
     </select>
-    <button onclick="exportToCSV()">⬇️ Export CSV</button>
-    <button onclick="exportToPDF()">📄 Export PDF</button>
+
+    <button onclick="applyFilters()">🔍 Apply Filters</button>
   </div>
 
   <div id="summary" style="margin-bottom:10px;font-weight:bold;"></div>
