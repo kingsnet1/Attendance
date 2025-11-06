@@ -43,22 +43,41 @@
   <div id="qrcode"></div>
   <button onclick="generateQR()">🔄 Refresh QR</button>
 
-  <script>
-    // Replace with your real attendance form link
-    const attendanceURL = " https://kingsnet1.github.io/Attendance/attendance.html";
+ <script>
+  // Base link to your attendance form
+  const baseURL = "https://kingsnet1.github.io/Attendance/attendance.html";
 
-    function generateQR() {
-      const qrcodeDiv = document.getElementById("qrcode");
-      qrcodeDiv.innerHTML = "";
-      new QRCode(qrcodeDiv, {
-        text: attendanceURL,
-        width: 220,
-        height: 220
-      });
-    }
+  function generateDailyToken() {
+    const today = new Date();
+    const dateToken = today.toISOString().slice(0, 10).replace(/-/g, ""); // e.g. 20251106
+    return btoa(dateToken); // Encoded token
+  }
 
+  function generateQR() {
+    const token = generateDailyToken();
+    const qrURL = `${baseURL}?token=${token}`;
+
+    const qrcodeDiv = document.getElementById("qrcode");
+    qrcodeDiv.innerHTML = "";
+    new QRCode(qrcodeDiv, {
+      text: qrURL,
+      width: 220,
+      height: 220
+    });
+
+    console.log("Today's QR link:", qrURL); // for testing
+  }
+
+  generateQR();
+
+  // Optional: Refresh manually
+  function refreshQR() {
     generateQR();
-  </script>
+    alert("QR code refreshed successfully!");
+  }
+</script>
+
 </body>
 </html>
+
 
