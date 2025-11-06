@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Class Attendance QR</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    #qrcode {
+      margin-top: 30px;
+      padding: 20px;
+      background: white;
+      display: inline-block;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>📸 Scan to Mark Attendance</h1>
+  <div id="qrcode"></div>
+
+  <script>
+    // URL where attendance form is hosted
+    const attendanceURL = "https://yourdomain.com/attendance.html";
+    new QRCode(document.getElementById("qrcode"), {
+      text: attendanceURL,
+      width: 220,
+      height: 220
+    });
+  </script>
+</body>
+</html>
