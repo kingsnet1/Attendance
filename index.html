@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Class Attendance QR</title>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
   <style>
@@ -23,21 +23,41 @@
       border-radius: 12px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
+    button {
+      margin-top: 25px;
+      padding: 10px 18px;
+      border: none;
+      background: #0078d7;
+      color: white;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #005fa3;
+    }
   </style>
 </head>
 <body>
   <h1>📸 Scan to Mark Attendance</h1>
   <div id="qrcode"></div>
+  <button onclick="generateQR()">🔄 Refresh QR</button>
 
   <script>
-    // URL where attendance form is hosted
-    const attendanceURL = " https://kingsnet1.github.io/Attendance/attendance.html";
-    new QRCode(document.getElementById("qrcode"), {
-      text: attendanceURL,
-      width: 220,
-      height: 220
-    });
+    // Replace with your real attendance form link
+    const attendanceURL = "https://attendace-9d237.web.app/attendance.html";
+
+    function generateQR() {
+      const qrcodeDiv = document.getElementById("qrcode");
+      qrcodeDiv.innerHTML = "";
+      new QRCode(qrcodeDiv, {
+        text: attendanceURL,
+        width: 220,
+        height: 220
+      });
+    }
+
+    generateQR();
   </script>
 </body>
 </html>
-
