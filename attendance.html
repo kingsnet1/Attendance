@@ -6,6 +6,30 @@
   <title>Mark Attendance</title>
 
   <script type="module">
+
+  <script>
+  // === Token Validation ===
+  function isTokenValid() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (!token) return false;
+
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const validToken = btoa(today);
+    return token === validToken;
+  }
+
+  if (!isTokenValid()) {
+    document.body.innerHTML = `
+      <div style="text-align:center; padding:50px; font-family:Arial">
+        <h2>⚠️ Invalid or expired attendance link.</h2>
+        <p>Please scan the official QR code from school premises.</p>
+      </div>`;
+    throw new Error("Invalid QR token");
+  }
+</script>
+
+    
     // ===== Firebase SDK Imports =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -138,3 +162,4 @@
   </form>
 </body>
 </html>
+
