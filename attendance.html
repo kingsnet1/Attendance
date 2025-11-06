@@ -1,16 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mark Attendance</title>
-
   <script type="module">
-    // ===== Firebase SDK Imports =====
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { 
+      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
-    // ===== Your Firebase Configuration =====
+    // ====== Firebase Config ======
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
@@ -20,109 +20,151 @@
       appId: "1:248211930711:web:88e178f5d0323e88966d12"
     };
 
-    // ===== Initialize Firebase & Firestore =====
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // ===== Attendance Form Logic =====
-    async function submitAttendance(e) {
-      e.preventDefault();
+    // ====== Submit Attendance ======
+    document.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("attendanceForm");
+      const statusMsg = document.getElementById("statusMsg");
 
-      const name = document.getElementById("fullName").value.trim();
-      const role = document.getElementById("role").value;
-      const submitBtn = document.getElementById("submitBtn");
-      const msg = document.getElementById("message");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
 
-      if (!name) {
-        msg.textContent = "Please enter your full name.";
-        msg.style.color = "red";
-        return;
+        const name = document.getElementById("name").value.trim();
+        const role = document.getElementById("role").value;
+        const className = document.getElementById("class").value.trim();
+
+        if (!name) {
+          showMsg("Please enter your name.", "error");
+          return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        try {
+          // Check for duplicate attendance (same name + same day)
+          const q = query(
+            collection(db, "attendance"),
+            where("name", "==", name)
+          );
+          const snapshot = await getDocs(q);
+
+          let alreadyMarked = false;
+          snapshot.forEach((doc) => {
+            const ts = doc.data().timestamp?.toDate();
+            if (ts) {
+              const dateOnly = new Date(ts);
+              dateOnly.setHours(0, 0, 0, 0);
+              if (dateOnly.getTime() === today.getTime()) {
+                alreadyMarked = true;
+              }
+            }
+          });
+
+          if (alreadyMarked) {
+            showMsg("🔁 You’ve already marked attendance for today!", "warn");
+            return;
+          }
+
+          await addDoc(collection(db, "attendance"), {
+            name,
+            role,
+            class: className || "—",
+            timestamp: serverTimestamp()
+          });
+
+          showMsg("✅ Attendance marked successfully!", "success");
+          form.reset();
+
+        } catch (error) {
+          console.error("Error adding attendance: ", error);
+          showMsg("❌ Something went wrong. Try again.", "error");
+        }
+      });
+
+      function showMsg(msg, type) {
+        statusMsg.textContent = msg;
+        statusMsg.className = `msg ${type}`;
+        statusMsg.style.display = "block";
       }
-
-      submitBtn.disabled = true;
-      msg.textContent = "Submitting...";
-      msg.style.color = "#333";
-
-      try {
-        await addDoc(collection(db, "attendance"), {
-          name,
-          role,
-          timestamp: serverTimestamp()
-        });
-
-        msg.textContent = "✅ Attendance marked successfully!";
-        msg.style.color = "green";
-        document.getElementById("attendanceForm").reset();
-      } catch (error) {
-        console.error("Error:", error);
-        msg.textContent = "❌ Error submitting attendance.";
-        msg.style.color = "red";
-      } finally {
-        submitBtn.disabled = false;
-      }
-    }
-
-    window.submitAttendance = submitAttendance;
+    });
   </script>
 
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: #f4f7f9;
+      color: #333;
       padding: 30px;
       text-align: center;
     }
+    h1 {
+      color: #0078d7;
+      margin-bottom: 20px;
+    }
     form {
       background: white;
-      padding: 20px;
-      margin: auto;
-      width: 90%;
-      max-width: 400px;
+      padding: 25px;
       border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 400px;
+      margin: auto;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
     }
     input, select, button {
       width: 100%;
-      padding: 12px;
-      margin-top: 10px;
+      padding: 10px;
+      margin-top: 12px;
+      border-radius: 6px;
       border: 1px solid #ccc;
-      border-radius: 8px;
-      font-size: 16px;
+      font-size: 15px;
     }
     button {
-      background-color: #0078d7;
+      background: #0078d7;
       color: white;
       border: none;
       cursor: pointer;
       font-weight: bold;
+      transition: background 0.3s;
     }
-    button:disabled {
-      background-color: #ccc;
-      cursor: not-allowed;
+    button:hover {
+      background: #005fa3;
     }
-    h1 {
-      color: #222;
-    }
-    #message {
+    .msg {
       margin-top: 15px;
+      padding: 10px;
+      border-radius: 6px;
       font-weight: bold;
+      display: none;
+    }
+    .msg.success {
+      background: #d1f7c4;
+      color: #0c6b09;
+    }
+    .msg.error {
+      background: #ffd6d6;
+      color: #b10000;
+    }
+    .msg.warn {
+      background: #fff3cd;
+      color: #856404;
     }
   </style>
 </head>
 <body>
   <h1>📋 Mark Your Attendance</h1>
 
-  <form id="attendanceForm" onsubmit="submitAttendance(event)">
-    <input type="text" id="fullName" placeholder="Enter Full Name" required />
-    
+  <form id="attendanceForm">
+    <input type="text" id="name" placeholder="Full Name" required />
     <select id="role" required>
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
-
-    <button id="submitBtn" type="submit">Submit</button>
-    <p id="message"></p>
+    <input type="text" id="class" placeholder="Class (optional)" />
+    <button type="submit">Submit Attendance</button>
+    <div id="statusMsg" class="msg"></div>
   </form>
 </body>
 </html>
