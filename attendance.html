@@ -8,7 +8,10 @@
   <script type="module">
     // ===== Firebase SDK Imports =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { 
+      getFirestore, collection, addDoc, serverTimestamp, 
+      query, where, getDocs 
+    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
     // ===== Your Firebase Configuration =====
     const firebaseConfig = {
@@ -35,29 +38,50 @@
       const msg = document.getElementById("message");
 
       if (!name || !role || !className) {
-        msg.textContent = "Please fill out all fields.";
+        msg.textContent = "⚠️ Please fill out all fields.";
         msg.style.color = "red";
         return;
       }
 
       submitBtn.disabled = true;
-      msg.textContent = "Submitting...";
+      msg.textContent = "Checking for duplicates...";
       msg.style.color = "#333";
 
       try {
-        await addDoc(collection(db, "attendance"), {
-          name,
-          role,
-          class: className,
-          timestamp: serverTimestamp()
-        });
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split("T")[0];
 
-        msg.textContent = "✅ Attendance marked successfully!";
-        msg.style.color = "green";
-        document.getElementById("attendanceForm").reset();
+        // Query Firestore for existing attendance today
+        const attendanceRef = collection(db, "attendance");
+        const q = query(
+          attendanceRef, 
+          where("name", "==", name),
+          where("date", "==", today)
+        );
+
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          msg.textContent = "⚠️ You have already marked attendance today.";
+          msg.style.color = "orange";
+        } else {
+          // Record new attendance
+          await addDoc(collection(db, "attendance"), {
+            name,
+            role,
+            class: className,
+            date: today,
+            timestamp: serverTimestamp()
+          });
+
+          msg.textContent = "✅ Attendance marked successfully!";
+          msg.style.color = "green";
+          document.getElementById("attendanceForm").reset();
+        }
+
       } catch (error) {
         console.error("Error:", error);
-        msg.textContent = "❌ Error submitting attendance.";
+        msg.textContent = "❌ Something went wrong. Try again.";
         msg.style.color = "red";
       } finally {
         submitBtn.disabled = false;
