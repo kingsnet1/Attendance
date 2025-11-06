@@ -14,24 +14,20 @@
       getAuth, onAuthStateChanged, signOut 
     } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
-    // ====== Firebase Config (replace with yours) ======
-    // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+    // ====== Firebase Config ======
+    const firebaseConfig = {
+      apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
+      authDomain: "attendace-9d237.firebaseapp.com",
+      projectId: "attendace-9d237",
+      storageBucket: "attendace-9d237.firebasestorage.app",
+      messagingSenderId: "248211930711",
+      appId: "1:248211930711:web:88e178f5d0323e88966d12"
+    };
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
-  authDomain: "attendace-9d237.firebaseapp.com",
-  projectId: "attendace-9d237",
-  storageBucket: "attendace-9d237.firebasestorage.app",
-  messagingSenderId: "248211930711",
-  appId: "1:248211930711:web:88e178f5d0323e88966d12"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+    // ====== Initialize Firebase ======
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
     // ====== Restrict Access ======
     onAuthStateChanged(auth, (user) => {
@@ -90,9 +86,7 @@ const app = initializeApp(firebaseConfig);
         rows.push(cells);
       });
 
-      const csvContent = "data:text/csv;charset=utf-8,"
-        + rows.map(e => e.join(",")).join("\n");
-
+      const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
       const link = document.createElement("a");
       link.setAttribute("href", encodeURI(csvContent));
       link.setAttribute("download", "attendance_records.csv");
