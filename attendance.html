@@ -4,27 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mark Attendance</title>
+
   <script type="module">
-    // ====== Firebase Setup ======
-    // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+    // ===== Firebase SDK Imports =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
-  authDomain: "attendace-9d237.firebaseapp.com",
-  projectId: "attendace-9d237",
-  storageBucket: "attendace-9d237.firebasestorage.app",
-  messagingSenderId: "248211930711",
-  appId: "1:248211930711:web:88e178f5d0323e88966d12"
-};
+    // ===== Your Firebase Configuration =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
+      authDomain: "attendace-9d237.firebaseapp.com",
+      projectId: "attendace-9d237",
+      storageBucket: "attendace-9d237.firebasestorage.app",
+      messagingSenderId: "248211930711",
+      appId: "1:248211930711:web:88e178f5d0323e88966d12"
+    };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+    // ===== Initialize Firebase & Firestore =====
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    // ====== Attendance Form Logic ======
+    // ===== Attendance Form Logic =====
     async function submitAttendance(e) {
       e.preventDefault();
 
