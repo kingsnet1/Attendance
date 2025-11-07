@@ -8,26 +8,25 @@
   <script type="module">
 
     // === Token Validation ===
-  function isTokenValid() {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    if (!token) return false;
+    function isTokenValid() {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      if (!token) return false;
 
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const validToken = btoa(today);
-    return token === validToken;
-  }
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const validToken = btoa(today);
+      return token === validToken;
+    }
 
-  if (!isTokenValid()) {
-    document.body.innerHTML = `
-      <div style="text-align:center; padding:50px; font-family:Arial">
-        <h2>⚠️ Invalid or expired attendance link.</h2>
-        <p>Please scan the official QR code from school premises.</p>
-      </div>`;
-    throw new Error("Invalid QR token");
-  }
+    if (!isTokenValid()) {
+      document.body.innerHTML = `
+        <div style="text-align:center; padding:50px; font-family:Arial">
+          <h2>⚠️ Invalid or expired attendance link.</h2>
+          <p>Please scan the official QR code from school premises.</p>
+        </div>`;
+      throw new Error("Invalid QR token");
+    }
 
-    
     // ===== Firebase SDK Imports =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -53,10 +52,11 @@
       const name = document.getElementById("fullName").value.trim();
       const role = document.getElementById("role").value;
       const className = document.getElementById("className").value;
+      const courseName = document.getElementById("CourseName").value;
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
-      if (!name || !role || !className) {
+      if (!name || !role || !className || !courseName) {
         msg.textContent = "Please fill out all fields.";
         msg.style.color = "red";
         return;
@@ -71,6 +71,7 @@
           name,
           role,
           class: className,
+          course: courseName,
           timestamp: serverTimestamp()
         });
 
@@ -143,15 +144,17 @@
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
-     </select>
-    <select id="ClassName" required>
+    </select>
+
+    <select id="className" required>
       <option value="">Select Class</option>
       <option value="Form 1">Form 1</option>
       <option value="Form 2">Form 2</option>
       <option value="Form 3">Form 3</option>
       <option value="Vacation Classes">Vacation Classes</option>
-      </select>
-      <select id="CourseName" required>
+    </select>
+
+    <select id="CourseName" required>
       <option value="">Select Course</option>
       <option value="Gen. Science">Gen. Science</option>
       <option value="Agric Science">Agric Science</option>
@@ -166,9 +169,3 @@
   </form>
 </body>
 </html>
-
-
-
-
-
-
