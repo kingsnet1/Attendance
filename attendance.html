@@ -27,9 +27,7 @@
     }
 
     // ===== Firebase SDK Imports =====
-    import { 
-      initializeApp 
-    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { 
       getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
@@ -44,103 +42,82 @@
       appId: "1:248211930711:web:88e178f5d0323e88966d12"
     };
 
-    // ===== Initialize Firebase & Firestore =====
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // ===== Attendance Form Logic =====
+    // ===== Attendance Logic =====
     async function submitAttendance(e) {
       e.preventDefault();
 
       const name = document.getElementById("fullName").value.trim();
       const role = document.getElementById("role").value;
-      const className = document.getElementById("className").value;
-      const courseName = document.getElementById("CourseName").value;
+      const className = document.getElementById("className")?.value || "";
+      const courseName = document.getElementById("CourseName")?.value || "";
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
-      if (!name || !role) {
+      if (!name || !role || (role === "Student" && (!className || !courseName))) {
         msg.textContent = "Please fill out all required fields.";
         msg.style.color = "red";
         return;
       }
 
-      if (role === "Student" && (!className || !courseName)) {
-        msg.textContent = "Please select your class and course.";
-        msg.style.color = "red";
-        return;
-      }
-
       submitBtn.disabled = true;
-      msg.textContent = "Checking attendance...";
+      msg.textContent = "Submitting...";
       msg.style.color = "#333";
 
       try {
-        // === Check for duplicate attendance (same person, same day) ===
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
+        // === Time-Based Status ===
+        const now = new Date();
+        const hours = now.getHours();
+        let status = "";
 
-        const attendanceRef = collection(db, "attendance");
+        if (hours >= 6 && hours < 9) status = "Present";
+        else if (hours >= 9 && hours <= 23) status = "Late";
+        else {
+          msg.textContent = "❌ Attendance can only be marked between 6:00am and 11:00pm.";
+          msg.style.color = "red";
+          submitBtn.disabled = false;
+          return;
+        }
+
+        // === Duplicate Check (per person per day) ===
+        const today = new Date().toISOString().slice(0, 10);
         const q = query(
-          attendanceRef,
+          collection(db, "attendance"),
           where("name", "==", name),
-          where("role", "==", role)
+          where("date", "==", today)
         );
 
-        const querySnapshot = await getDocs(q);
-        let duplicateFound = false;
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.timestamp && data.timestamp.toDate() >= today && data.timestamp.toDate() < tomorrow) {
-            duplicateFound = true;
-          }
-        });
-
-        if (duplicateFound) {
-          msg.textContent = "⚠️ You have already marked attendance today.";
+        const existing = await getDocs(q);
+        if (!existing.empty) {
+          msg.textContent = "⚠️ Attendance already marked for today.";
           msg.style.color = "orange";
           submitBtn.disabled = false;
           return;
         }
 
-        // === Record attendance ===
-        await addDoc(attendanceRef, {
+        // === Save Record ===
+        await addDoc(collection(db, "attendance"), {
           name,
           role,
-          class: role === "Student" ? className : "N/A",
-          course: role === "Student" ? courseName : "N/A",
+          class: role === "Student" ? className : "",
+          course: role === "Student" ? courseName : "",
+          date: today,
+          time: now.toLocaleTimeString(),
+          status,
           timestamp: serverTimestamp()
         });
 
-        msg.textContent = "✅ Attendance marked successfully!";
+        msg.textContent = `✅ ${status}! Attendance marked successfully.`;
         msg.style.color = "green";
         document.getElementById("attendanceForm").reset();
-        toggleFields(); // Reset visibility after submission
-
       } catch (error) {
-        console.error("Error:", error);
+        console.error("Error submitting attendance:", error);
         msg.textContent = "❌ Error submitting attendance.";
         msg.style.color = "red";
       } finally {
         submitBtn.disabled = false;
-      }
-    }
-
-    // ===== Hide/show fields based on role =====
-    window.toggleFields = function() {
-      const role = document.getElementById("role").value;
-      const classGroup = document.getElementById("classGroup");
-      const courseGroup = document.getElementById("courseGroup");
-
-      if (role === "Teacher") {
-        classGroup.style.display = "none";
-        courseGroup.style.display = "none";
-      } else {
-        classGroup.style.display = "block";
-        courseGroup.style.display = "block";
       }
     }
 
@@ -189,6 +166,9 @@
       margin-top: 15px;
       font-weight: bold;
     }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -196,42 +176,36 @@
 
   <form id="attendanceForm" onsubmit="submitAttendance(event)">
     <input type="text" id="fullName" placeholder="Enter Full Name" required />
-    
-    <select id="role" required onchange="toggleFields()">
+
+    <select id="role" required onchange="
+      document.getElementById('className').classList.toggle('hidden', this.value === 'Teacher');
+      document.getElementById('CourseName').classList.toggle('hidden', this.value === 'Teacher');
+    ">
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
 
-    <div id="classGroup">
-      <select id="className">
-        <option value="">Select Class</option>
-        <option value="Form 1">Form 1</option>
-        <option value="Form 2">Form 2</option>
-        <option value="Form 3">Form 3</option>
-        <option value="Vacation Classes">Vacation Classes</option>
-      </select>
-    </div>
+    <select id="className" required>
+      <option value="">Select Class</option>
+      <option value="Form 1">Form 1</option>
+      <option value="Form 2">Form 2</option>
+      <option value="Form 3">Form 3</option>
+      <option value="Vacation Classes">Vacation Classes</option>
+    </select>
 
-    <div id="courseGroup">
-      <select id="CourseName">
-        <option value="">Select Course</option>
-        <option value="Gen. Science">Gen. Science</option>
-        <option value="Agric Science">Agric Science</option>
-        <option value="Gen. Arts">Gen. Arts</option>
-        <option value="Business">Business</option>
-        <option value="Home Economics">Home Economics</option>
-        <option value="Visual Arts">Visual Arts</option>
-      </select>
-    </div>
+    <select id="CourseName" required>
+      <option value="">Select Course</option>
+      <option value="Gen. Science">Gen. Science</option>
+      <option value="Agric Science">Agric Science</option>
+      <option value="Gen. Arts">Gen. Arts</option>
+      <option value="Business">Business</option>
+      <option value="Home Economics">Home Economics</option>
+      <option value="Visual Arts">Visual Arts</option>
+    </select>
 
     <button id="submitBtn" type="submit">Submit</button>
     <p id="message"></p>
   </form>
-
-  <script>
-    // Initialize correct field visibility on page load
-    document.addEventListener("DOMContentLoaded", toggleFields);
-  </script>
 </body>
 </html>
