@@ -6,7 +6,6 @@
   <title>Mark Attendance</title>
 
   <script type="module">
-
     // === Token Validation ===
     function isTokenValid() {
       const params = new URLSearchParams(window.location.search);
@@ -31,7 +30,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
-    // ===== Your Firebase Configuration =====
+    // ===== Firebase Configuration =====
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
@@ -56,8 +55,15 @@
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
-      if (!name || !role || !className || !courseName) {
-        msg.textContent = "Please fill out all fields.";
+      if (!name || !role) {
+        msg.textContent = "Please fill out all required fields.";
+        msg.style.color = "red";
+        return;
+      }
+
+      // For students, class and course are mandatory
+      if (role === "Student" && (!className || !courseName)) {
+        msg.textContent = "Please select your class and course.";
         msg.style.color = "red";
         return;
       }
@@ -70,20 +76,36 @@
         await addDoc(collection(db, "attendance"), {
           name,
           role,
-          class: className,
-          course: courseName,
+          class: role === "Student" ? className : "N/A",
+          course: role === "Student" ? courseName : "N/A",
           timestamp: serverTimestamp()
         });
 
         msg.textContent = "✅ Attendance marked successfully!";
         msg.style.color = "green";
         document.getElementById("attendanceForm").reset();
+        toggleFields(); // Reset visibility after submission
       } catch (error) {
         console.error("Error:", error);
         msg.textContent = "❌ Error submitting attendance.";
         msg.style.color = "red";
       } finally {
         submitBtn.disabled = false;
+      }
+    }
+
+    // ===== Hide/show fields based on role =====
+    window.toggleFields = function() {
+      const role = document.getElementById("role").value;
+      const classGroup = document.getElementById("classGroup");
+      const courseGroup = document.getElementById("courseGroup");
+
+      if (role === "Teacher") {
+        classGroup.style.display = "none";
+        courseGroup.style.display = "none";
+      } else {
+        classGroup.style.display = "block";
+        courseGroup.style.display = "block";
       }
     }
 
@@ -140,32 +162,41 @@
   <form id="attendanceForm" onsubmit="submitAttendance(event)">
     <input type="text" id="fullName" placeholder="Enter Full Name" required />
     
-    <select id="role" required>
+    <select id="role" required onchange="toggleFields()">
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
 
-    <select id="className" required>
-      <option value="">Select Class</option>
-      <option value="Form 1">Form 1</option>
-      <option value="Form 2">Form 2</option>
-      <option value="Form 3">Form 3</option>
-      <option value="Vacation Classes">Vacation Classes</option>
-    </select>
+    <div id="classGroup">
+      <select id="className">
+        <option value="">Select Class</option>
+        <option value="Form 1">Form 1</option>
+        <option value="Form 2">Form 2</option>
+        <option value="Form 3">Form 3</option>
+        <option value="Vacation Classes">Vacation Classes</option>
+      </select>
+    </div>
 
-    <select id="CourseName" required>
-      <option value="">Select Course</option>
-      <option value="Gen. Science">Gen. Science</option>
-      <option value="Agric Science">Agric Science</option>
-      <option value="Gen. Arts">Gen. Arts</option>
-      <option value="Business">Business</option>
-      <option value="Home Economics">Home Economics</option>
-      <option value="Visual Arts">Visual Arts</option>
-    </select>
+    <div id="courseGroup">
+      <select id="CourseName">
+        <option value="">Select Course</option>
+        <option value="Gen. Science">Gen. Science</option>
+        <option value="Agric Science">Agric Science</option>
+        <option value="Gen. Arts">Gen. Arts</option>
+        <option value="Business">Business</option>
+        <option value="Home Economics">Home Economics</option>
+        <option value="Visual Arts">Visual Arts</option>
+      </select>
+    </div>
 
     <button id="submitBtn" type="submit">Submit</button>
     <p id="message"></p>
   </form>
+
+  <script>
+    // Initialize correct field visibility on page load
+    document.addEventListener("DOMContentLoaded", toggleFields);
+  </script>
 </body>
 </html>
