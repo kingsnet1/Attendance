@@ -28,9 +28,8 @@
 
     // ===== Firebase SDK Imports =====
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-    import { 
-      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp 
-    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp } 
+    from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
     // ===== Firebase Configuration =====
     const firebaseConfig = {
@@ -51,8 +50,13 @@
 
       const name = document.getElementById("fullName").value.trim();
       const role = document.getElementById("role").value;
-      const className = document.getElementById("className")?.value || "";
-      const courseName = document.getElementById("CourseName")?.value || "";
+      const className = document.getElementById("className").classList.contains("hidden")
+        ? "" 
+        : document.getElementById("className").value;
+      const courseName = document.getElementById("CourseName").classList.contains("hidden")
+        ? "" 
+        : document.getElementById("CourseName").value;
+
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
@@ -178,8 +182,11 @@
     <input type="text" id="fullName" placeholder="Enter Full Name" required />
 
     <select id="role" required onchange="
-      document.getElementById('className').classList.toggle('hidden', this.value === 'Teacher');
-      document.getElementById('CourseName').classList.toggle('hidden', this.value === 'Teacher');
+      const isTeacher = this.value === 'Teacher';
+      document.getElementById('className').classList.toggle('hidden', isTeacher);
+      document.getElementById('CourseName').classList.toggle('hidden', isTeacher);
+      document.getElementById('className').required = !isTeacher;
+      document.getElementById('CourseName').required = !isTeacher;
     ">
       <option value="">Select Role</option>
       <option value="Student">Student</option>
