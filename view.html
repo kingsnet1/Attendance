@@ -4,14 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Attendance Dashboard</title>
+
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (Excel Export) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- jsPDF (PDF Export) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getFirestore, collection, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
-    // ===== Firebase Config =====
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
       authDomain: "attendace-9d237.firebaseapp.com",
@@ -27,7 +33,7 @@
 
     let allData = [];
 
-    // ===== Auth Check =====
+    // === Auth Check ===
     onAuthStateChanged(auth, (user) => {
       if (!user) {
         window.location.href = "admin.html";
@@ -37,31 +43,28 @@
       }
     });
 
-    // ===== Logout =====
-    window.logoutAdmin = function () {
-      signOut(auth).then(() => window.location.href = "admin.html");
-    };
+    // === Logout ===
+    window.logoutAdmin = () => signOut(auth).then(() => (window.location.href = "admin.html"));
 
-    // ===== Load Attendance =====
+    // === Load Attendance ===
     function loadAttendance() {
       const sortOrder = document.getElementById("sortOrder")?.value || "desc";
       const q = query(collection(db, "attendance"), orderBy("timestamp", sortOrder));
-
       onSnapshot(q, (snapshot) => {
         allData = [];
-        snapshot.forEach((doc) => {
-          allData.push({ id: doc.id, ...doc.data() });
-        });
+        snapshot.forEach((doc) => allData.push({ id: doc.id, ...doc.data() }));
         applyFilters();
       });
     }
 
-    // ===== Apply Filters =====
+    // === Apply Filters ===
     window.applyFilters = function () {
       let filtered = [...allData];
-
       const fromDate = document.getElementById("fromDate").value;
       const toDate = document.getElementById("toDate").value;
+      const role = document.getElementById("roleFilter").value;
+      const className = document.getElementById("classFilter").value;
+
       if (fromDate || toDate) {
         filtered = filtered.filter(item => {
           const d = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
@@ -72,15 +75,9 @@
         });
       }
 
-      const role = document.getElementById("roleFilter").value;
-      if (role) filtered = filtered.filter(i => i.role?.trim() === role);
-
-      const className = document.getElementById("classFilter").value;
-      if (className) {
-        filtered = filtered.filter(i =>
-          (i.class || i.course || i.program || "").trim() === className
-        );
-      }
+      if (role) filtered = filtered.filter(i => i.role === role);
+      if (className)
+        filtered = filtered.filter(i => (i.class || i.course || i.program) === className);
 
       renderTable(filtered);
       updateSummary(filtered);
@@ -88,7 +85,7 @@
       updateClassSummary(filtered);
     };
 
-    // ===== Render Table =====
+    // === Render Table ===
     function renderTable(data) {
       const tableBody = document.getElementById("attendanceBody");
       tableBody.innerHTML = "";
@@ -104,8 +101,8 @@
         tableBody.innerHTML += `
           <tr>
             <td>${++count}</td>
-            <td>${item.name || "—"}</td>
-            <td>${item.role || "—"}</td>
+            <td>${item.name}</td>
+            <td>${item.role}</td>
             <td>${className}</td>
             <td>${date}</td>
             <td>${time}</td>
@@ -116,21 +113,13 @@
       document.getElementById("count").textContent = count;
     }
 
-    // ===== Check Lateness =====
     function checkLate(dateObj) {
       const hour = dateObj.getHours();
       const min = dateObj.getMinutes();
       return hour > 9 || (hour === 9 && min > 0);
     }
 
-    // ===== Search =====
-    window.filterSearch = function () {
-      const term = document.getElementById("searchBox").value.toLowerCase();
-      const filtered = allData.filter(d => d.name?.toLowerCase().includes(term));
-      renderTable(filtered);
-    };
-
-    // ===== Summary =====
+    // === Summary ===
     function updateSummary(data) {
       const total = data.length;
       const students = data.filter(d => d.role === "Student").length;
@@ -139,7 +128,7 @@
         `Students: ${students} | Teachers: ${teachers}`;
     }
 
-    // ===== Class Summary =====
+    // === Class Summary ===
     function updateClassSummary(data) {
       const classGroups = {};
       data.forEach(d => {
@@ -164,12 +153,11 @@
       });
     }
 
-    // ===== Attendance Chart =====
+    // === Chart ===
     function updateChart(data) {
       const ctx = document.getElementById("attendanceChart").getContext("2d");
       const grouped = {};
-
-      data.forEach((d) => {
+      data.forEach(d => {
         const date = d.timestamp?.toDate().toLocaleDateString();
         grouped[date] = (grouped[date] || 0) + 1;
       });
@@ -180,21 +168,47 @@
       if (window.attChart) window.attChart.destroy();
       window.attChart = new Chart(ctx, {
         type: "bar",
-        data: {
-          labels,
-          datasets: [{
-            label: "Attendance Count",
-            data: values,
-            backgroundColor: "#0078d7"
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true } }
-        }
+        data: { labels, datasets: [{ label: "Attendance Count", data: values, backgroundColor: "#0078d7" }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
       });
     }
+
+    // === EXPORT TO EXCEL ===
+    window.exportToExcel = function () {
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.table_to_sheet(document.querySelector("table"));
+      const ws2 = XLSX.utils.table_to_sheet(document.getElementById("classSummaryTable"));
+      XLSX.utils.book_append_sheet(wb, ws1, "Attendance");
+      XLSX.utils.book_append_sheet(wb, ws2, "Class Summary");
+      XLSX.writeFile(wb, "Attendance_Report.xlsx");
+    };
+
+    // === EXPORT TO PDF ===
+    window.exportToPDF = function () {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF("p", "pt");
+      doc.text("Attendance Report", 40, 40);
+
+      doc.autoTable({
+        html: "table",
+        startY: 70,
+        styles: { fontSize: 8 },
+        theme: "grid",
+        headStyles: { fillColor: [0, 120, 215] },
+      });
+
+      doc.addPage();
+      doc.text("Class Summary", 40, 40);
+      doc.autoTable({
+        html: "#classSummaryTable",
+        startY: 60,
+        styles: { fontSize: 9 },
+        theme: "grid",
+        headStyles: { fillColor: [0, 120, 215] },
+      });
+
+      doc.save("Attendance_Report.pdf");
+    };
   </script>
 
   <style>
@@ -205,12 +219,13 @@
     button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
     button:hover { background: #005fa3; }
     .logout-btn { background: #dc3545; } .logout-btn:hover { background: #b02a37; }
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top: 15px; }
     th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
     th { background-color: #0078d7; color: white; }
     tr:hover { background: #f9f9f9; }
     .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
     canvas { margin-top: 30px; background: white; padding: 10px; border-radius: 10px; }
+    .export-buttons { margin-top: 20px; display: flex; gap: 10px; }
   </style>
 </head>
 <body>
@@ -223,15 +238,12 @@
   </header>
 
   <div class="toolbar">
-    <label>Search:</label>
-    <input id="searchBox" onkeyup="filterSearch()" placeholder="Enter name...">
+    <label>Search:</label><input id="searchBox" onkeyup="filterSearch()" placeholder="Enter name...">
     <label>From:</label><input type="date" id="fromDate" onchange="applyFilters()">
     <label>To:</label><input type="date" id="toDate" onchange="applyFilters()">
     <label>Role:</label>
     <select id="roleFilter" onchange="applyFilters()">
-      <option value="">All</option>
-      <option value="Student">Student</option>
-      <option value="Teacher">Teacher</option>
+      <option value="">All</option><option value="Student">Student</option><option value="Teacher">Teacher</option>
     </select>
     <label>Class:</label>
     <select id="classFilter" onchange="applyFilters()">
@@ -251,25 +263,25 @@
     <button onclick="applyFilters()">🔍 Apply Filters</button>
   </div>
 
+  <div class="export-buttons">
+    <button onclick="exportToExcel()">⬇️ Export Excel</button>
+    <button onclick="exportToPDF()">📄 Export PDF</button>
+  </div>
+
   <div id="summary" style="margin-bottom:10px;font-weight:bold;"></div>
   <div>Total Records: <span id="count">0</span></div>
 
   <table>
     <thead>
-      <tr>
-        <th>#</th><th>Full Name</th><th>Role</th><th>Class</th><th>Date</th><th>Time</th><th>Status</th>
-      </tr>
+      <tr><th>#</th><th>Full Name</th><th>Role</th><th>Class</th><th>Date</th><th>Time</th><th>Status</th></tr>
     </thead>
     <tbody id="attendanceBody"></tbody>
   </table>
 
-  <!-- CLASS SUMMARY SECTION -->
   <h2 style="margin-top:40px;color:#0078d7;">📚 Class Attendance Summary</h2>
-  <table>
+  <table id="classSummaryTable">
     <thead>
-      <tr>
-        <th>#</th><th>Class</th><th>Present</th><th>Late</th><th>Total</th>
-      </tr>
+      <tr><th>#</th><th>Class</th><th>Present</th><th>Late</th><th>Total</th></tr>
     </thead>
     <tbody id="classSummaryBody"></tbody>
   </table>
@@ -277,3 +289,4 @@
   <canvas id="attendanceChart" height="120"></canvas>
 </body>
 </html>
+
