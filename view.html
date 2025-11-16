@@ -14,17 +14,17 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, query, orderBy, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, orderBy, query, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
-      authDomain: "attendace-9d237.firebaseapp.com",
-      projectId: "attendace-9d237",
-      storageBucket: "attendace-9d237.firebasestorage.app",
-      messagingSenderId: "248211930711",
-      appId: "1:248211930711:web:88e178f5d0323e88966d12"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -32,93 +32,91 @@
     const auth = getAuth(app);
 
     let allData = [];
-    let isSuperAdmin = false;
-    let adminBranch = null;
+    let currentAdmin = null;
 
-    // Auth Check
     onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        window.location.href = "admin.html";
-      } else {
-        document.getElementById("adminEmail").textContent = user.email;
+      if (!user) { window.location.href = "admin.html"; return; }
 
-        // Fetch admin details
-        const adminDoc = await getDoc(doc(db, "admins", user.uid));
-        const adminData = adminDoc.data();
-        isSuperAdmin = adminData?.isSuper || false;
-        adminBranch = isSuperAdmin ? null : adminData?.branch || "";
-
-        // If normal admin, pre-select branch and disable dropdown
-        if (!isSuperAdmin) {
-          const branchDropdown = document.getElementById("branchFilter");
-          branchDropdown.value = adminBranch;
-          branchDropdown.disabled = true;
-        }
-
-        loadAttendance();
-      }
+      const adminDoc = await getDoc(doc(db, "admins", user.uid));
+      currentAdmin = adminDoc.data();
+      document.getElementById("adminEmail").textContent = user.email;
+      loadAttendance();
     });
 
-    // Logout
-    window.logoutAdmin = () => signOut(auth).then(() => (window.location.href = "admin.html"));
+    window.logoutAdmin = () => signOut(auth).then(() => window.location.href="admin.html");
 
-    // Load Attendance
     function loadAttendance() {
-      const sortOrder = document.getElementById("sortOrder")?.value || "desc";
+      const sortOrder = document.getElementById("sortOrder").value || "desc";
       const q = query(collection(db, "attendance"), orderBy("timestamp", sortOrder));
+
       onSnapshot(q, (snapshot) => {
         allData = [];
-        snapshot.forEach((doc) => allData.push({ id: doc.id, ...doc.data() }));
+        snapshot.forEach(doc => {
+          const item = { id: doc.id, ...doc.data() };
+          // Normal admins see only their branch
+          if (!currentAdmin.isSuper && item.branch !== currentAdmin.branch) return;
+          allData.push(item);
+        });
+
         populateFilters();
         applyFilters();
       });
     }
 
-    // Populate Class & Course filters dynamically
     function populateFilters() {
       const classSet = new Set();
       const courseSet = new Set();
+      const branchSet = new Set();
+
       allData.forEach(d => {
         if (d.class) classSet.add(d.class);
         if (d.course) courseSet.add(d.course);
+        if (d.branch) branchSet.add(d.branch);
       });
 
       const classFilter = document.getElementById("classFilter");
       const courseFilter = document.getElementById("courseFilter");
+      const branchFilter = document.getElementById("branchFilter");
 
-      // Remove old dynamic options
       classFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
       courseFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
+      branchFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
 
-      Array.from(classSet).sort().forEach(cls => {
+      Array.from(classSet).sort().forEach(c => {
         const opt = document.createElement("option");
-        opt.value = cls;
-        opt.text = cls;
-        opt.classList.add("dynamic");
+        opt.value = c; opt.text = c; opt.classList.add("dynamic");
         classFilter.appendChild(opt);
       });
 
-      Array.from(courseSet).sort().forEach(course => {
+      Array.from(courseSet).sort().forEach(c => {
         const opt = document.createElement("option");
-        opt.value = course;
-        opt.text = course;
-        opt.classList.add("dynamic");
+        opt.value = c; opt.text = c; opt.classList.add("dynamic");
         courseFilter.appendChild(opt);
       });
+
+      if (currentAdmin.isSuper) {
+        Array.from(branchSet).sort().forEach(b => {
+          const opt = document.createElement("option");
+          opt.value = b; opt.text = b; opt.classList.add("dynamic");
+          branchFilter.appendChild(opt);
+        });
+      } else {
+        // normal admin: only their branch
+        branchFilter.value = currentAdmin.branch;
+        branchFilter.disabled = true;
+      }
     }
 
-    // Apply Filters
-    window.applyFilters = function () {
+    window.applyFilters = function() {
       let filtered = [...allData];
       const fromDate = document.getElementById("fromDate").value;
       const toDate = document.getElementById("toDate").value;
       const role = document.getElementById("roleFilter").value;
-      const branch = document.getElementById("branchFilter").value;
+      const branch = currentAdmin.isSuper ? document.getElementById("branchFilter").value : currentAdmin.branch;
       const className = document.getElementById("classFilter").value;
       const courseName = document.getElementById("courseFilter").value;
       const searchText = document.getElementById("searchBox").value.toLowerCase();
 
-      // Date filter
       if (fromDate || toDate) {
         filtered = filtered.filter(item => {
           const d = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
@@ -129,96 +127,68 @@
         });
       }
 
-      // Role filter
       if (role) filtered = filtered.filter(i => i.role === role);
-
-      // Branch filter (normal admin limited to their branch)
-      if (!isSuperAdmin && adminBranch) {
-        filtered = filtered.filter(i => (i.branch || "").trim() === adminBranch);
-      } else if (branch) {
-        filtered = filtered.filter(i => (i.branch || "").trim() === branch);
-      }
-
-      // Class filter
-      if (className) filtered = filtered.filter(i => (i.class || "").trim() === className);
-
-      // Course filter
-      if (courseName) filtered = filtered.filter(i => (i.course || "").trim() === courseName);
-
-      // Search filter
-      if (searchText) filtered = filtered.filter(i => (i.name || "").toLowerCase().includes(searchText));
+      if (branch) filtered = filtered.filter(i => i.branch === branch);
+      if (className) filtered = filtered.filter(i => i.class === className);
+      if (courseName) filtered = filtered.filter(i => i.course === courseName);
+      if (searchText) filtered = filtered.filter(i => i.name.toLowerCase().includes(searchText));
 
       renderTable(filtered);
       updateSummary(filtered);
-      updateClassSummary(filtered);
       updateChart(filtered);
+      updateClassSummary(filtered);
     };
 
-    // Render Table
     function renderTable(data) {
       const tableBody = document.getElementById("attendanceBody");
       tableBody.innerHTML = "";
       let count = 0;
-
       data.forEach(item => {
         const dateObj = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
         const date = dateObj.toLocaleDateString();
         const time = dateObj.toLocaleTimeString();
-        const status = (item.status) ? item.status + (checkLate(dateObj) && item.status !== 'Late' ? ' ⏰' : '') : (checkLate(dateObj) ? "Late ⏰" : "Present ✅");
-
-        const classVal = item.class || "N/A";
-        const courseVal = item.course || "N/A";
-
+        const status = item.status || "Present ✅";
         tableBody.innerHTML += `
           <tr>
             <td>${++count}</td>
             <td>${item.name || "—"}</td>
             <td>${item.role || "—"}</td>
-            <td>${classVal}</td>
-            <td>${courseVal}</td>
+            <td>${item.class || "N/A"}</td>
+            <td>${item.course || "N/A"}</td>
             <td>${date}</td>
             <td>${time}</td>
             <td>${status}</td>
           </tr>`;
       });
-
       document.getElementById("count").textContent = count;
     }
 
-    function checkLate(dateObj) {
-      const hour = dateObj.getHours();
-      const min = dateObj.getMinutes();
-      return hour > 9 || (hour === 9 && min > 0);
-    }
-
     function updateSummary(data) {
-      const students = data.filter(d => d.role === "Student").length;
-      const teachers = data.filter(d => d.role === "Teacher").length;
-      document.getElementById("summary").textContent =
-        `Students: ${students} | Teachers: ${teachers}`;
+      const students = data.filter(d => d.role==="Student").length;
+      const teachers = data.filter(d => d.role==="Teacher").length;
+      document.getElementById("summary").textContent = `Students: ${students} | Teachers: ${teachers}`;
     }
 
     function updateClassSummary(data) {
       const classGroups = {};
       data.forEach(d => {
-        const c = d.class || "Unspecified";
-        if (!classGroups[c]) classGroups[c] = { present: 0, late: 0 };
+        const cls = d.class || "Unspecified";
+        if (!classGroups[cls]) classGroups[cls] = { present: 0, late: 0 };
         const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date();
-        if (checkLate(ts)) classGroups[c].late++;
-        else classGroups[c].present++;
+        if (ts.getHours() > 9 || (ts.getHours()===9 && ts.getMinutes()>0)) classGroups[cls].late++;
+        else classGroups[cls].present++;
       });
 
       const tbody = document.getElementById("classSummaryBody");
       tbody.innerHTML = "";
       Object.entries(classGroups).forEach(([cls, val], idx) => {
-        tbody.innerHTML += `
-          <tr>
-            <td>${idx + 1}</td>
-            <td>${cls}</td>
-            <td>${val.present}</td>
-            <td>${val.late}</td>
-            <td>${val.present + val.late}</td>
-          </tr>`;
+        tbody.innerHTML += `<tr>
+          <td>${idx+1}</td>
+          <td>${cls}</td>
+          <td>${val.present}</td>
+          <td>${val.late}</td>
+          <td>${val.present+val.late}</td>
+        </tr>`;
       });
     }
 
@@ -241,66 +211,42 @@
       });
     }
 
-    // Export
-    window.exportToExcel = function () {
+    window.filterSearch = () => applyFilters();
+
+    window.exportToExcel = function() {
       const wb = XLSX.utils.book_new();
-      const attTable = document.getElementById("attendanceTable");
-      const ws1 = XLSX.utils.table_to_sheet(attTable);
-      XLSX.utils.book_append_sheet(wb, ws1, "Attendance");
-
-      const clsTable = document.getElementById("classSummaryTable");
-      const ws2 = XLSX.utils.table_to_sheet(clsTable);
-      XLSX.utils.book_append_sheet(wb, ws2, "Class Summary");
-
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById("attendanceTable")), "Attendance");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById("classSummaryTable")), "Class Summary");
       XLSX.writeFile(wb, "Attendance_Report.xlsx");
     };
 
-    window.exportToPDF = function () {
+    window.exportToPDF = function() {
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF("p", "pt");
       doc.text("Attendance Report", 40, 40);
-
-      doc.autoTable({
-        html: "#attendanceTable",
-        startY: 70,
-        styles: { fontSize: 8 },
-        theme: "grid",
-        headStyles: { fillColor: [0, 120, 215] },
-      });
-
+      doc.autoTable({ html: "#attendanceTable", startY: 70, styles:{ fontSize:8 }, theme:"grid", headStyles:{ fillColor:[0,120,215] }});
       doc.addPage();
       doc.text("Class Summary", 40, 40);
-      doc.autoTable({
-        html: "#classSummaryTable",
-        startY: 60,
-        styles: { fontSize: 9 },
-        theme: "grid",
-        headStyles: { fillColor: [0, 120, 215] },
-      });
-
+      doc.autoTable({ html:"#classSummaryTable", startY:60, styles:{ fontSize:9 }, theme:"grid", headStyles:{ fillColor:[0,120,215] }});
       doc.save("Attendance_Report.pdf");
-    };
-
-    window.filterSearch = function () {
-      applyFilters();
     };
   </script>
 
   <style>
-    body { font-family: "Segoe UI", Arial, sans-serif; background: #f4f7f9; padding: 20px; color: #333; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    h1 { color: #0078d7; }
-    button, select, input { padding: 8px 14px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
-    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
-    button:hover { background: #005fa3; }
-    .logout-btn { background: #dc3545; } .logout-btn:hover { background: #b02a37; }
-    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top: 15px; }
-    th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
-    th { background-color: #0078d7; color: white; }
-    tr:hover { background: #f9f9f9; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items:center; }
-    canvas { margin-top: 30px; background: white; padding: 10px; border-radius: 10px; }
-    .export-buttons { margin-top: 20px; display: flex; gap: 10px; }
+    body { font-family: "Segoe UI", Arial, sans-serif; background:#f4f7f9; padding:20px; color:#333; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    h1 { color:#0078d7; }
+    button, select, input { padding:8px 14px; border-radius:6px; border:1px solid #ccc; font-size:14px; }
+    button { background:#0078d7; color:white; border:none; cursor:pointer; font-weight:bold; }
+    button:hover { background:#005fa3; }
+    .logout-btn { background:#dc3545; } .logout-btn:hover { background:#b02a37; }
+    table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.05); margin-top:15px; }
+    th, td { padding:12px; border-bottom:1px solid #ddd; text-align:left; }
+    th { background-color:#0078d7; color:white; }
+    tr:hover { background:#f9f9f9; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; align-items:center; }
+    canvas { margin-top:30px; background:white; padding:10px; border-radius:10px; }
+    .export-buttons { margin-top:20px; display:flex; gap:10px; }
   </style>
 </head>
 <body>
@@ -322,27 +268,18 @@
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
-
     <label>Branch:</label>
     <select id="branchFilter" onchange="applyFilters()">
       <option value="">All</option>
-      <option value="Afra Odumase">Afra Odumase</option>
-      <option value="Edwenase">Edwenase</option>
-      <option value="Accra">Accra</option>
-      <option value="Takoradi">Takoradi</option>
-      <option value="Tamale">Tamale</option>
     </select>
-
     <label>Class:</label>
     <select id="classFilter" onchange="applyFilters()">
       <option value="">All</option>
     </select>
-
     <label>Course:</label>
     <select id="courseFilter" onchange="applyFilters()">
       <option value="">All</option>
     </select>
-
     <label>Sort:</label>
     <select id="sortOrder" onchange="loadAttendance()">
       <option value="desc">Newest First</option>
@@ -377,4 +314,3 @@
   <canvas id="attendanceChart" height="120"></canvas>
 </body>
 </html>
-
