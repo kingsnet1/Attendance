@@ -51,15 +51,15 @@
 
       const name = document.getElementById("fullName").value.trim();
       const role = document.getElementById("role").value;
-      const className = document.getElementById("className").classList.contains("hidden")
-        ? "N/A"
-        : document.getElementById("className").value;
-      const courseName = document.getElementById("CourseName").value || "N/A";
+
+      const isTeacher = role === "Teacher";
+      const className = isTeacher ? "N/A" : document.getElementById("className").value;
+      const courseName = isTeacher ? "N/A" : document.getElementById("CourseName").value;
 
       const submitBtn = document.getElementById("submitBtn");
       const msg = document.getElementById("message");
 
-      if (!name || !role || (role === "Student" && (!className || !courseName))) {
+      if (!name || !role || (!isTeacher && (!className || !courseName))) {
         msg.textContent = "Please fill out all required fields.";
         msg.style.color = "red";
         return;
@@ -115,6 +115,11 @@
         msg.textContent = `✅ ${status}! Attendance marked successfully.`;
         msg.style.color = "green";
         document.getElementById("attendanceForm").reset();
+
+        // Re-hide class & course when role resets
+        document.getElementById("className").classList.add("hidden");
+        document.getElementById("CourseName").classList.add("hidden");
+
       } catch (error) {
         console.error("Error submitting attendance:", error);
         msg.textContent = "❌ Error submitting attendance.";
@@ -182,15 +187,21 @@
 
     <select id="role" required onchange="
       const isTeacher = this.value === 'Teacher';
+
+      // Toggle Class visibility
       document.getElementById('className').classList.toggle('hidden', isTeacher);
       document.getElementById('className').required = !isTeacher;
+
+      // Toggle Course visibility
+      document.getElementById('CourseName').classList.toggle('hidden', isTeacher);
+      document.getElementById('CourseName').required = !isTeacher;
     ">
       <option value="">Select Role</option>
       <option value="Student">Student</option>
       <option value="Teacher">Teacher</option>
     </select>
 
-    <select id="className" required>
+    <select id="className" class="hidden">
       <option value="">Select Class</option>
       <option value="Form 1">Form 1</option>
       <option value="Form 2">Form 2</option>
@@ -198,7 +209,7 @@
       <option value="Vacation Classes">Vacation Classes</option>
     </select>
 
-    <select id="CourseName" required>
+    <select id="CourseName" class="hidden">
       <option value="">Select Course</option>
       <option value="Gen. Science">Gen. Science</option>
       <option value="Agric Science">Agric Science</option>
@@ -213,4 +224,3 @@
   </form>
 </body>
 </html>
-
