@@ -64,18 +64,18 @@
       const courseSet = new Set();
 
       allData.forEach(d => {
-        if (d.class && d.class.toString().trim() !== "") classSet.add(d.class.toString().trim());
-        if (d.course && d.course.toString().trim() !== "") courseSet.add(d.course.toString().trim());
+        if (d.class && d.class.toString().trim().length > 0) classSet.add(d.class.toString().trim());
+        if (d.course && d.course.toString().trim().length > 0) courseSet.add(d.course.toString().trim());
       });
 
       const classFilter = document.getElementById("classFilter");
       const courseFilter = document.getElementById("courseFilter");
 
-      // Clear previous dynamic options (keep "All")
+      // Remove previous dynamic options but keep "All"
       classFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
       courseFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
 
-      Array.from(classSet).sort().forEach(cls => {
+      Array.from(classSet).sort((a,b) => a.localeCompare(b)).forEach(cls => {
         const opt = document.createElement("option");
         opt.value = cls;
         opt.text = cls;
@@ -83,7 +83,7 @@
         classFilter.appendChild(opt);
       });
 
-      Array.from(courseSet).sort().forEach(course => {
+      Array.from(courseSet).sort((a,b) => a.localeCompare(b)).forEach(course => {
         const opt = document.createElement("option");
         opt.value = course;
         opt.text = course;
