@@ -64,8 +64,8 @@
       const courseSet = new Set();
 
       allData.forEach(d => {
-        if (d.class) classSet.add(d.class);
-        if (d.course) courseSet.add(d.course);
+        if (d.class && d.class.toString().trim() !== "") classSet.add(d.class.toString().trim());
+        if (d.course && d.course.toString().trim() !== "") courseSet.add(d.course.toString().trim());
       });
 
       const classFilter = document.getElementById("classFilter");
