@@ -64,6 +64,7 @@
       const toDate = document.getElementById("toDate").value;
       const role = document.getElementById("roleFilter").value;
       const className = document.getElementById("classFilter").value;
+      const courseName = document.getElementById("courseFilter").value;
 
       if (fromDate || toDate) {
         filtered = filtered.filter(item => {
@@ -76,8 +77,8 @@
       }
 
       if (role) filtered = filtered.filter(i => i.role === role);
-      if (className)
-        filtered = filtered.filter(i => (i.class || i.course || i.program) === className);
+      if (className) filtered = filtered.filter(i => (i.class || i.course || i.program || "").trim() === className);
+      if (courseName) filtered = filtered.filter(i => (i.course || i.class || i.program || "").trim() === courseName);
 
       renderTable(filtered);
       updateSummary(filtered);
@@ -95,15 +96,19 @@
         const dateObj = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
         const date = dateObj.toLocaleDateString();
         const time = dateObj.toLocaleTimeString();
-        const status = checkLate(dateObj) ? "Late ⏰" : "Present ✅";
-        const className = item.class || item.course || item.program || "—";
+        const status = (item.status) ? item.status + (checkLate(dateObj) && item.status !== 'Late' ? ' ⏰' : '') : (checkLate(dateObj) ? "Late ⏰" : "Present ✅");
+
+        // show both class and course separately (course prioritized for 'Course' column)
+        const classVal = item.class || "N/A";
+        const courseVal = item.course || item.CourseName || item.program || "N/A";
 
         tableBody.innerHTML += `
           <tr>
             <td>${++count}</td>
-            <td>${item.name}</td>
-            <td>${item.role}</td>
-            <td>${className}</td>
+            <td>${item.name || "—"}</td>
+            <td>${item.role || "—"}</td>
+            <td>${classVal}</td>
+            <td>${courseVal}</td>
             <td>${date}</td>
             <td>${time}</td>
             <td>${status}</td>
@@ -132,10 +137,11 @@
     function updateClassSummary(data) {
       const classGroups = {};
       data.forEach(d => {
-        const c = d.class || d.course || d.program || "Unspecified";
+        // group by class (if you want group by course change to courseVal)
+        const c = d.class || "Unspecified";
         if (!classGroups[c]) classGroups[c] = { present: 0, late: 0 };
-        const isLate = checkLate(d.timestamp?.toDate ? d.timestamp.toDate() : new Date());
-        if (isLate) classGroups[c].late++;
+        const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date();
+        if (checkLate(ts)) classGroups[c].late++;
         else classGroups[c].present++;
       });
 
@@ -158,7 +164,7 @@
       const ctx = document.getElementById("attendanceChart").getContext("2d");
       const grouped = {};
       data.forEach(d => {
-        const date = d.timestamp?.toDate().toLocaleDateString();
+        const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : new Date().toLocaleDateString();
         grouped[date] = (grouped[date] || 0) + 1;
       });
 
@@ -176,10 +182,17 @@
     // === EXPORT TO EXCEL ===
     window.exportToExcel = function () {
       const wb = XLSX.utils.book_new();
-      const ws1 = XLSX.utils.table_to_sheet(document.querySelector("table"));
-      const ws2 = XLSX.utils.table_to_sheet(document.getElementById("classSummaryTable"));
+
+      // Create attendance sheet from attendance table specifically
+      const attTable = document.getElementById("attendanceTable");
+      const ws1 = XLSX.utils.table_to_sheet(attTable);
       XLSX.utils.book_append_sheet(wb, ws1, "Attendance");
+
+      // Class summary sheet
+      const clsTable = document.getElementById("classSummaryTable");
+      const ws2 = XLSX.utils.table_to_sheet(clsTable);
       XLSX.utils.book_append_sheet(wb, ws2, "Class Summary");
+
       XLSX.writeFile(wb, "Attendance_Report.xlsx");
     };
 
@@ -190,7 +203,7 @@
       doc.text("Attendance Report", 40, 40);
 
       doc.autoTable({
-        html: "table",
+        html: "#attendanceTable",
         startY: 70,
         styles: { fontSize: 8 },
         theme: "grid",
@@ -209,6 +222,39 @@
 
       doc.save("Attendance_Report.pdf");
     };
+
+    // small helper to initialize filters on first load (keeps course/ class filters in sync if you want later)
+    window.populateFilters = function() {
+      // optional: generate unique class/course lists from allData and populate select options
+      const classSet = new Set();
+      const courseSet = new Set();
+      allData.forEach(d => {
+        if (d.class) classSet.add(d.class);
+        if (d.course) courseSet.add(d.course);
+      });
+
+      const classFilter = document.getElementById("classFilter");
+      const courseFilter = document.getElementById("courseFilter");
+      // keep "All" as first
+      // remove existing dynamic options (preserve index 0)
+      [...classFilter.options].slice(1).forEach(o => classFilter.remove(1));
+      [...courseFilter.options].slice(1).forEach(o => courseFilter.remove(1));
+
+      Array.from(classSet).sort().forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c; opt.text = c;
+        classFilter.appendChild(opt);
+      });
+      Array.from(courseSet).sort().forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c; opt.text = c;
+        courseFilter.appendChild(opt);
+      });
+    };
+
+    // call populateFilters every time data updates
+    const origApplyFilters = applyFilters;
+    // we'll call populateFilters at end of onSnapshot via loadAttendance -> applyFilters already invoked there
   </script>
 
   <style>
@@ -223,7 +269,7 @@
     th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
     th { background-color: #0078d7; color: white; }
     tr:hover { background: #f9f9f9; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items:center; }
     canvas { margin-top: 30px; background: white; padding: 10px; border-radius: 10px; }
     .export-buttons { margin-top: 20px; display: flex; gap: 10px; }
   </style>
@@ -255,6 +301,16 @@
       <option value="Home Economics">Home Economics</option>
       <option value="Visual Arts">Visual Arts</option>
     </select>
+    <label>Course:</label>
+    <select id="courseFilter" onchange="applyFilters()">
+      <option value="">All</option>
+      <option value="Gen. Science">Gen. Science</option>
+      <option value="Agric Science">Agric Science</option>
+      <option value="Gen. Arts">Gen. Arts</option>
+      <option value="Business">Business</option>
+      <option value="Home Economics">Home Economics</option>
+      <option value="Visual Arts">Visual Arts</option>
+    </select>
     <label>Sort:</label>
     <select id="sortOrder" onchange="loadAttendance()">
       <option value="desc">Newest First</option>
@@ -271,9 +327,10 @@
   <div id="summary" style="margin-bottom:10px;font-weight:bold;"></div>
   <div>Total Records: <span id="count">0</span></div>
 
-  <table>
+  <!-- Attendance table (id added for exports) -->
+  <table id="attendanceTable">
     <thead>
-      <tr><th>#</th><th>Full Name</th><th>Role</th><th>Class</th><th>Date</th><th>Time</th><th>Status</th></tr>
+      <tr><th>#</th><th>Full Name</th><th>Role</th><th>Class</th><th>Course</th><th>Date</th><th>Time</th><th>Status</th></tr>
     </thead>
     <tbody id="attendanceBody"></tbody>
   </table>
@@ -289,4 +346,3 @@
   <canvas id="attendanceChart" height="120"></canvas>
 </body>
 </html>
-
