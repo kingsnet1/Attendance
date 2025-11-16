@@ -149,11 +149,20 @@
   <form id="attendanceForm" onsubmit="submitAttendance(event)">
     <input id="fullName" placeholder="Enter Full Name" required />
 
-    <select id="role" required 
+    <select id="role" required
       onchange="
         const teacher = this.value === 'Teacher';
-        document.getElementById('className').classList.toggle('hidden', teacher);
-        document.getElementById('CourseName').classList.toggle('hidden', teacher);
+        const classField = document.getElementById('className');
+        const courseField = document.getElementById('CourseName');
+
+        classField.classList.toggle('hidden', teacher);
+        courseField.classList.toggle('hidden', teacher);
+
+        // Reset hidden fields to avoid stale values
+        if (teacher) {
+          classField.value = '';
+          courseField.value = '';
+        }
       ">
       <option value="">Select Role</option>
       <option value="Student">Student</option>
@@ -169,7 +178,7 @@
       <option value="Tamale">Tamale</option>
     </select>
 
-    <select id="className" required>
+    <select id="className">
       <option value="">Select Class</option>
       <option value="Form 1">Form 1</option>
       <option value="Form 2">Form 2</option>
@@ -177,7 +186,7 @@
       <option value="Vacation Classes">Vacation Classes</option>
     </select>
 
-    <select id="CourseName" required>
+    <select id="CourseName">
       <option value="">Select Course</option>
       <option value="Gen. Science">Gen. Science</option>
       <option value="Agric Science">Agric Science</option>
