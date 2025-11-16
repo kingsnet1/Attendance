@@ -1,145 +1,128 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mark Attendance</title>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getFirestore, collection, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
-      authDomain: "attendace-9d237.firebaseapp.com",
-      projectId: "attendace-9d237",
-      storageBucket: "attendace-9d237.firebasestorage.app",
-      messagingSenderId: "248211930711",
-      appId: "1:248211930711:web:88e178f5d0323e88966d12"
-    };
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const auth = getAuth(app);
+let allData = [];
+let currentAdmin = null; // store logged-in admin data
 
-    window.adminBranch = null;
+// Auth check and load admin info
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    window.location.href = "admin.html";
+    return;
+  }
 
-    // === Auth Check & Load Admin Branch ===
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        window.location.href = "admin.html";
-      } else {
-        document.getElementById("adminEmail").textContent = user.email;
+  // Get admin record
+  const adminDoc = await getDoc(doc(db, "admins", user.uid));
+  currentAdmin = adminDoc.data();
+  document.getElementById("adminEmail").textContent = user.email;
 
-        // Get admin branch from Firestore
-        const adminDoc = await fetch(`https://firestore.googleapis.com/v1/projects/attendace-9d237/databases/(default)/documents/admins/${user.uid}`).then(r => r.json());
-        window.adminBranch = adminDoc.fields?.branch?.stringValue || null;
+  loadAttendance();
+});
 
-        // Hide branch selector if admin has assigned branch
-        if (window.adminBranch) {
-          document.getElementById("branchGroup").style.display = "none";
-        }
-      }
+// Logout
+window.logoutAdmin = () => signOut(auth).then(() => window.location.href="admin.html");
+
+// Load Attendance
+function loadAttendance() {
+  const sortOrder = document.getElementById("sortOrder").value || "desc";
+  const q = query(collection(db, "attendance"), orderBy("timestamp", sortOrder));
+
+  onSnapshot(q, (snapshot) => {
+    allData = [];
+    snapshot.forEach(doc => {
+      const item = { id: doc.id, ...doc.data() };
+
+      // Normal admins see only their branch
+      if (!currentAdmin.isSuper && item.branch !== currentAdmin.branch) return;
+
+      allData.push(item);
     });
 
-    // === Mark Attendance ===
-    window.markAttendance = async () => {
-      const name = document.getElementById("name").value.trim();
-      const role = document.getElementById("role").value;
-      const className = document.getElementById("class").value;
-      const course = document.getElementById("course").value;
-      const status = document.getElementById("status").value;
-      const timestamp = new Date();
-      const branch = window.adminBranch || document.getElementById("branch").value;
+    populateFilters();
+    applyFilters();
+  });
+}
 
-      if (!name || !role || !className || !course || !status || !branch) {
-        alert("Please fill all fields!");
-        return;
-      }
+// Populate Class & Course Filters dynamically
+function populateFilters() {
+  const classSet = new Set();
+  const courseSet = new Set();
 
-      try {
-        await addDoc(collection(db, "attendance"), {
-          name,
-          role,
-          class: className,
-          course,
-          status,
-          branch,
-          timestamp
-        });
-        alert("Attendance marked successfully!");
-        document.getElementById("attendanceForm").reset();
-      } catch (err) {
-        console.error(err);
-        alert("Error marking attendance!");
-      }
-    };
-  </script>
+  allData.forEach(d => {
+    if (d.class) classSet.add(d.class);
+    if (d.course) courseSet.add(d.course);
+  });
 
-  <style>
-    body { font-family: "Segoe UI", Arial, sans-serif; background: #f4f7f9; padding: 20px; color: #333; }
-    input, select, button { padding: 8px 12px; margin: 6px 0; width: 100%; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
-    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
-    button:hover { background: #005fa3; }
-    .form-group { margin-bottom: 12px; }
-    label { font-weight: bold; display: block; margin-bottom: 4px; }
-    .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>📋 Mark Attendance</h2>
-    <span>👤 <b id="adminEmail">Loading...</b></span>
+  const classFilter = document.getElementById("classFilter");
+  const courseFilter = document.getElementById("courseFilter");
 
-    <form id="attendanceForm" onsubmit="event.preventDefault(); markAttendance();">
-      <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" id="name" placeholder="Enter full name" required>
-      </div>
+  // remove old options
+  classFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
+  courseFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
 
-      <div class="form-group">
-        <label>Role</label>
-        <select id="role" required>
-          <option value="">Select Role</option>
-          <option value="Student">Student</option>
-          <option value="Teacher">Teacher</option>
-        </select>
-      </div>
+  Array.from(classSet).sort().forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.text = c;
+    opt.classList.add("dynamic");
+    classFilter.appendChild(opt);
+  });
 
-      <div class="form-group">
-        <label>Class</label>
-        <input type="text" id="class" placeholder="e.g. Vacation Classes" required>
-      </div>
+  Array.from(courseSet).sort().forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.text = c;
+    opt.classList.add("dynamic");
+    courseFilter.appendChild(opt);
+  });
+}
 
-      <div class="form-group">
-        <label>Course</label>
-        <input type="text" id="course" placeholder="e.g. Agric Science" required>
-      </div>
+// Apply Filters (Branch automatically filtered for normal admin)
+window.applyFilters = function() {
+  let filtered = [...allData];
+  const fromDate = document.getElementById("fromDate").value;
+  const toDate = document.getElementById("toDate").value;
+  const role = document.getElementById("roleFilter").value;
+  const branch = currentAdmin.isSuper ? document.getElementById("branchFilter").value : currentAdmin.branch;
+  const className = document.getElementById("classFilter").value;
+  const courseName = document.getElementById("courseFilter").value;
+  const searchText = document.getElementById("searchBox").value.toLowerCase();
 
-      <div class="form-group" id="branchGroup">
-        <label>Branch</label>
-        <select id="branch" required>
-          <option value="">Select Branch</option>
-          <option value="Afra Odumase">Afra Odumase</option>
-          <option value="Edwenase">Edwenase</option>
-          <option value="Accra">Accra</option>
-          <option value="Takoradi">Takoradi</option>
-          <option value="Tamale">Tamale</option>
-        </select>
-      </div>
+  // date filter
+  if (fromDate || toDate) {
+    filtered = filtered.filter(item => {
+      const d = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
+      const dateOnly = d.toISOString().split("T")[0];
+      if (fromDate && dateOnly < fromDate) return false;
+      if (toDate && dateOnly > toDate) return false;
+      return true;
+    });
+  }
 
-      <div class="form-group">
-        <label>Status</label>
-        <select id="status" required>
-          <option value="">Select Status</option>
-          <option value="Present">Present ✅</option>
-          <option value="Late">Late ⏰</option>
-        </select>
-      </div>
+  if (role) filtered = filtered.filter(i => i.role === role);
+  if (branch) filtered = filtered.filter(i => i.branch === branch);
+  if (className) filtered = filtered.filter(i => i.class === className);
+  if (courseName) filtered = filtered.filter(i => i.course === courseName);
+  if (searchText) filtered = filtered.filter(i => i.name.toLowerCase().includes(searchText));
 
-      <button type="submit">Mark Attendance</button>
-    </form>
-  </div>
-</body>
-</html>
+  renderTable(filtered);
+  updateSummary(filtered);
+  updateChart(filtered);
+  updateClassSummary(filtered);
+};
+</script>
