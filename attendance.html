@@ -6,31 +6,9 @@
   <title>Mark Attendance</title>
 
   <script type="module">
-    // === Token Validation ===
-    function isTokenValid() {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get("token");
-      if (!token) return false;
-
-      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const validToken = btoa(today);
-      return token === validToken;
-    }
-
-    if (!isTokenValid()) {
-      document.body.innerHTML = `
-        <div style="text-align:center; padding:50px; font-family:Arial">
-          <h2>⚠️ Invalid or expired attendance link.</h2>
-          <p>Please scan the official QR code from the school premises.</p>
-        </div>`;
-      throw new Error("Invalid QR token");
-    }
-
-    // Firebase
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-    import { 
-      getFirestore, collection, addDoc, query, where, getDocs, serverTimestamp 
-    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDZMEJ6ALhKRZ-Bv3tmQ71TSnIZd89prow",
@@ -43,161 +21,125 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
-    // SUBMIT ATTENDANCE
-    async function submitAttendance(e) {
-      e.preventDefault();
+    window.adminBranch = null;
 
-      const name = document.getElementById("fullName").value.trim();
+    // === Auth Check & Load Admin Branch ===
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = "admin.html";
+      } else {
+        document.getElementById("adminEmail").textContent = user.email;
+
+        // Get admin branch from Firestore
+        const adminDoc = await fetch(`https://firestore.googleapis.com/v1/projects/attendace-9d237/databases/(default)/documents/admins/${user.uid}`).then(r => r.json());
+        window.adminBranch = adminDoc.fields?.branch?.stringValue || null;
+
+        // Hide branch selector if admin has assigned branch
+        if (window.adminBranch) {
+          document.getElementById("branchGroup").style.display = "none";
+        }
+      }
+    });
+
+    // === Mark Attendance ===
+    window.markAttendance = async () => {
+      const name = document.getElementById("name").value.trim();
       const role = document.getElementById("role").value;
-      const className = role === "Teacher" ? "N/A" : document.getElementById("className").value;
-      const courseName = role === "Teacher" ? "N/A" : document.getElementById("CourseName").value;
-      const branch = document.getElementById("branch").value;
+      const className = document.getElementById("class").value;
+      const course = document.getElementById("course").value;
+      const status = document.getElementById("status").value;
+      const timestamp = new Date();
+      const branch = window.adminBranch || document.getElementById("branch").value;
 
-      const submitBtn = document.getElementById("submitBtn");
-      const msg = document.getElementById("message");
-
-      if (!name || !role || !branch) {
-        msg.textContent = "Please fill all required fields.";
-        msg.style.color = "red";
+      if (!name || !role || !className || !course || !status || !branch) {
+        alert("Please fill all fields!");
         return;
       }
-
-      if (role === "Student" && (!className || !courseName)) {
-        msg.textContent = "Students must select Class & Course.";
-        msg.style.color = "red";
-        return;
-      }
-
-      submitBtn.disabled = true;
-      msg.textContent = "Submitting...";
-      msg.style.color = "#333";
 
       try {
-        // Time-Based Status
-        const now = new Date();
-        const hours = now.getHours();
-        let status = (hours >= 6 && hours < 9) ? "Present" :
-                     (hours >= 9 && hours <= 23) ? "Late" : "";
-
-        if (!status) {
-          msg.textContent = "❌ Attendance can only be marked between 6:00am and 11:00pm.";
-          msg.style.color = "red";
-          submitBtn.disabled = false;
-          return;
-        }
-
-        // Duplicate Check Daily
-        const today = new Date().toISOString().slice(0, 10);
-        const q = query(
-          collection(db, "attendance"),
-          where("name", "==", name),
-          where("date", "==", today)
-        );
-
-        const existing = await getDocs(q);
-        if (!existing.empty) {
-          msg.textContent = "⚠️ Attendance already marked today.";
-          msg.style.color = "orange";
-          submitBtn.disabled = false;
-          return;
-        }
-
-        // Save Data
         await addDoc(collection(db, "attendance"), {
           name,
           role,
           class: className,
-          course: courseName,
-          branch,
-          date: today,
-          time: now.toLocaleTimeString(),
+          course,
           status,
-          timestamp: serverTimestamp()
+          branch,
+          timestamp
         });
-
-        msg.textContent = `✅ ${status}! Attendance marked successfully.`;
-        msg.style.color = "green";
+        alert("Attendance marked successfully!");
         document.getElementById("attendanceForm").reset();
-
-      } catch (error) {
-        console.error(error);
-        msg.textContent = "❌ Error submitting attendance.";
-        msg.style.color = "red";
+      } catch (err) {
+        console.error(err);
+        alert("Error marking attendance!");
       }
-
-      submitBtn.disabled = false;
-    }
-
-    window.submitAttendance = submitAttendance;
+    };
   </script>
 
   <style>
-    body { font-family: Arial; background: #f7f7f7; padding: 30px; text-align:center; }
-    form { background:white; padding:20px; width:90%; max-width:400px; margin:auto;
-      border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
-    input, select, button { width:100%; padding:12px; margin-top:10px;
-      border:1px solid #ccc; border-radius:8px; font-size:16px; }
-    button { background:#0078d7; color:white; border:none; cursor:pointer; }
-    .hidden { display:none; }
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f4f7f9; padding: 20px; color: #333; }
+    input, select, button { padding: 8px 12px; margin: 6px 0; width: 100%; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #005fa3; }
+    .form-group { margin-bottom: 12px; }
+    label { font-weight: bold; display: block; margin-bottom: 4px; }
+    .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
   </style>
 </head>
-
 <body>
-  <h1>📋 Mark Your Attendance</h1>
+  <div class="container">
+    <h2>📋 Mark Attendance</h2>
+    <span>👤 <b id="adminEmail">Loading...</b></span>
 
-  <form id="attendanceForm" onsubmit="submitAttendance(event)">
-    <input id="fullName" placeholder="Enter Full Name" required />
+    <form id="attendanceForm" onsubmit="event.preventDefault(); markAttendance();">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="name" placeholder="Enter full name" required>
+      </div>
 
-    <select id="role" required
-      onchange="
-        const teacher = this.value === 'Teacher';
-        const classField = document.getElementById('className');
-        const courseField = document.getElementById('CourseName');
+      <div class="form-group">
+        <label>Role</label>
+        <select id="role" required>
+          <option value="">Select Role</option>
+          <option value="Student">Student</option>
+          <option value="Teacher">Teacher</option>
+        </select>
+      </div>
 
-        classField.classList.toggle('hidden', teacher);
-        courseField.classList.toggle('hidden', teacher);
+      <div class="form-group">
+        <label>Class</label>
+        <input type="text" id="class" placeholder="e.g. Vacation Classes" required>
+      </div>
 
-        // Reset hidden fields to avoid stale values
-        if (teacher) {
-          classField.value = '';
-          courseField.value = '';
-        }
-      ">
-      <option value="">Select Role</option>
-      <option value="Student">Student</option>
-      <option value="Teacher">Teacher</option>
-    </select>
+      <div class="form-group">
+        <label>Course</label>
+        <input type="text" id="course" placeholder="e.g. Agric Science" required>
+      </div>
 
-    <select id="branch" required>
-      <option value="">Select Branch</option>
-      <option value="Afra Odumase">Afra Odumase</option>
-      <option value="Edwenase">Edwenase</option>
-      <option value="Accra">Accra</option>
-      <option value="Takoradi">Takoradi</option>
-      <option value="Tamale">Tamale</option>
-    </select>
+      <div class="form-group" id="branchGroup">
+        <label>Branch</label>
+        <select id="branch" required>
+          <option value="">Select Branch</option>
+          <option value="Afra Odumase">Afra Odumase</option>
+          <option value="Edwenase">Edwenase</option>
+          <option value="Accra">Accra</option>
+          <option value="Takoradi">Takoradi</option>
+          <option value="Tamale">Tamale</option>
+        </select>
+      </div>
 
-    <select id="className">
-      <option value="">Select Class</option>
-      <option value="Form 1">Form 1</option>
-      <option value="Form 2">Form 2</option>
-      <option value="Form 3">Form 3</option>
-      <option value="Vacation Classes">Vacation Classes</option>
-    </select>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="status" required>
+          <option value="">Select Status</option>
+          <option value="Present">Present ✅</option>
+          <option value="Late">Late ⏰</option>
+        </select>
+      </div>
 
-    <select id="CourseName">
-      <option value="">Select Course</option>
-      <option value="Gen. Science">Gen. Science</option>
-      <option value="Agric Science">Agric Science</option>
-      <option value="Gen. Arts">Gen. Arts</option>
-      <option value="Business">Business</option>
-      <option value="Home Economics">Home Economics</option>
-      <option value="Visual Arts">Visual Arts</option>
-    </select>
-
-    <button id="submitBtn">Submit</button>
-    <p id="message"></p>
-  </form>
+      <button type="submit">Mark Attendance</button>
+    </form>
+  </div>
 </body>
 </html>
