@@ -15,7 +15,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getFirestore, collection, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+    import { getFirestore, collection, onSnapshot, orderBy, query, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -32,12 +32,25 @@
     const auth = getAuth(app);
 
     let allData = [];
+    window.adminBranch = null; // Store assigned branch
 
-    // === Auth Check ===
-    onAuthStateChanged(auth, (user) => {
-      if (!user) window.location.href = "admin.html";
-      else {
+    // === Auth Check & Load Admin Branch ===
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = "admin.html";
+      } else {
         document.getElementById("adminEmail").textContent = user.email;
+
+        // Get admin branch from Firestore
+        const adminDoc = await getDoc(doc(db, "admins", user.uid));
+        const adminData = adminDoc.data();
+        window.adminBranch = adminData?.branch || null;
+
+        // Hide branch dropdown if admin has assigned branch
+        if (window.adminBranch) {
+          document.getElementById("branchFilter").style.display = "none";
+        }
+
         loadAttendance();
       }
     });
@@ -51,47 +64,48 @@
       const q = query(collection(db, "attendance"), orderBy("timestamp", sortOrder));
       onSnapshot(q, (snapshot) => {
         allData = [];
-        snapshot.forEach(doc => allData.push({ id: doc.id, ...doc.data() }));
+        snapshot.forEach((doc) => allData.push({ id: doc.id, ...doc.data() }));
         populateFilters();
         applyFilters();
       });
     }
 
-    // === Populate Class & Course filters dynamically, exclude "N/A" ===
+    // === Populate Class & Course filters dynamically ===
     function populateFilters() {
       const classSet = new Set();
       const courseSet = new Set();
 
       allData.forEach(d => {
-        const cls = d.class?.toString().trim();
-        const course = d.course?.toString().trim();
-
-        if (cls && cls !== "N/A") classSet.add(cls);
-        if (course && course !== "N/A") courseSet.add(course);
+        if (d.class && d.class.trim() !== "") classSet.add(d.class.trim());
+        if (d.course && d.course.trim() !== "") courseSet.add(d.course.trim());
       });
 
       const classFilter = document.getElementById("classFilter");
       const courseFilter = document.getElementById("courseFilter");
 
-      // Remove previous dynamic options (keep "All")
+      // Clear previous dynamic options (keep "All")
       classFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
       courseFilter.querySelectorAll("option.dynamic").forEach(o => o.remove());
 
-      Array.from(classSet).sort((a,b)=>a.localeCompare(b)).forEach(cls=>{
+      Array.from(classSet).sort().forEach(cls => {
         const opt = document.createElement("option");
-        opt.value = cls; opt.text = cls; opt.classList.add("dynamic");
+        opt.value = cls;
+        opt.text = cls;
+        opt.classList.add("dynamic");
         classFilter.appendChild(opt);
       });
 
-      Array.from(courseSet).sort((a,b)=>a.localeCompare(b)).forEach(course=>{
+      Array.from(courseSet).sort().forEach(course => {
         const opt = document.createElement("option");
-        opt.value = course; opt.text = course; opt.classList.add("dynamic");
+        opt.value = course;
+        opt.text = course;
+        opt.classList.add("dynamic");
         courseFilter.appendChild(opt);
       });
     }
 
     // === Apply Filters ===
-    window.applyFilters = function() {
+    window.applyFilters = function () {
       let filtered = [...allData];
       const fromDate = document.getElementById("fromDate").value;
       const toDate = document.getElementById("toDate").value;
@@ -101,8 +115,9 @@
       const courseName = document.getElementById("courseFilter").value;
       const searchText = document.getElementById("searchBox").value.toLowerCase();
 
+      // Date filter
       if (fromDate || toDate) {
-        filtered = filtered.filter(item=>{
+        filtered = filtered.filter(item => {
           const d = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
           const dateOnly = d.toISOString().split("T")[0];
           if (fromDate && dateOnly < fromDate) return false;
@@ -111,17 +126,30 @@
         });
       }
 
+      // Role filter
       if (role) filtered = filtered.filter(i => i.role === role);
-      if (branch) filtered = filtered.filter(i => (i.branch||"").trim() === branch);
-      if (className) filtered = filtered.filter(i => (i.class||"").trim() === className);
-      if (courseName) filtered = filtered.filter(i => (i.course||"").trim() === courseName);
-      if (searchText) filtered = filtered.filter(i => (i.name||"").toLowerCase().includes(searchText));
+
+      // Branch filter (auto-apply if admin has assigned branch)
+      if (window.adminBranch) {
+        filtered = filtered.filter(i => (i.branch || "").trim() === window.adminBranch);
+      } else if (branch) {
+        filtered = filtered.filter(i => (i.branch || "").trim() === branch);
+      }
+
+      // Class filter
+      if (className) filtered = filtered.filter(i => (i.class || "").trim() === className);
+
+      // Course filter
+      if (courseName) filtered = filtered.filter(i => (i.course || "").trim() === courseName);
+
+      // Search filter
+      if (searchText) filtered = filtered.filter(i => (i.name || "").toLowerCase().includes(searchText));
 
       renderTable(filtered);
       updateSummary(filtered);
       updateChart(filtered);
       updateClassSummary(filtered);
-    }
+    };
 
     // === Render Table ===
     function renderTable(data) {
@@ -129,19 +157,20 @@
       tableBody.innerHTML = "";
       let count = 0;
 
-      data.forEach(item => {
+      data.forEach((item) => {
         const dateObj = item.timestamp?.toDate ? item.timestamp.toDate() : new Date();
         const date = dateObj.toLocaleDateString();
         const time = dateObj.toLocaleTimeString();
-        const status = item.status ? item.status + (checkLate(dateObj)&&item.status!=='Late'?' ⏰':'') : (checkLate(dateObj)?"Late ⏰":"Present ✅");
+        const status = (item.status) ? item.status + (checkLate(dateObj) && item.status !== 'Late' ? ' ⏰' : '') : (checkLate(dateObj) ? "Late ⏰" : "Present ✅");
+
         const classVal = item.class || "N/A";
         const courseVal = item.course || "N/A";
 
         tableBody.innerHTML += `
           <tr>
             <td>${++count}</td>
-            <td>${item.name||"—"}</td>
-            <td>${item.role||"—"}</td>
+            <td>${item.name || "—"}</td>
+            <td>${item.role || "—"}</td>
             <td>${classVal}</td>
             <td>${courseVal}</td>
             <td>${date}</td>
@@ -154,36 +183,38 @@
     }
 
     function checkLate(dateObj) {
-      const hour = dateObj.getHours(); const min = dateObj.getMinutes();
-      return hour > 9 || (hour===9 && min>0);
+      const hour = dateObj.getHours();
+      const min = dateObj.getMinutes();
+      return hour > 9 || (hour === 9 && min > 0);
     }
 
     function updateSummary(data) {
-      const students = data.filter(d=>d.role==='Student').length;
-      const teachers = data.filter(d=>d.role==='Teacher').length;
-      document.getElementById("summary").textContent = `Students: ${students} | Teachers: ${teachers}`;
+      const students = data.filter(d => d.role === "Student").length;
+      const teachers = data.filter(d => d.role === "Teacher").length;
+      document.getElementById("summary").textContent =
+        `Students: ${students} | Teachers: ${teachers}`;
     }
 
     function updateClassSummary(data) {
       const classGroups = {};
-      data.forEach(d=>{
+      data.forEach(d => {
         const c = d.class || "Unspecified";
-        if(!classGroups[c]) classGroups[c] = { present:0, late:0 };
+        if (!classGroups[c]) classGroups[c] = { present: 0, late: 0 };
         const ts = d.timestamp?.toDate ? d.timestamp.toDate() : new Date();
-        if(checkLate(ts)) classGroups[c].late++;
+        if (checkLate(ts)) classGroups[c].late++;
         else classGroups[c].present++;
       });
 
       const tbody = document.getElementById("classSummaryBody");
       tbody.innerHTML = "";
-      Object.entries(classGroups).forEach(([cls,val],idx)=>{
+      Object.entries(classGroups).forEach(([cls, val], idx) => {
         tbody.innerHTML += `
           <tr>
-            <td>${idx+1}</td>
+            <td>${idx + 1}</td>
             <td>${cls}</td>
             <td>${val.present}</td>
             <td>${val.late}</td>
-            <td>${val.present+val.late}</td>
+            <td>${val.present + val.late}</td>
           </tr>`;
       });
     }
@@ -191,23 +222,23 @@
     function updateChart(data) {
       const ctx = document.getElementById("attendanceChart").getContext("2d");
       const grouped = {};
-      data.forEach(d=>{
+      data.forEach(d => {
         const date = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleDateString() : new Date().toLocaleDateString();
-        grouped[date] = (grouped[date]||0)+1;
+        grouped[date] = (grouped[date] || 0) + 1;
       });
 
       const labels = Object.keys(grouped);
       const values = Object.values(grouped);
 
-      if(window.attChart) window.attChart.destroy();
+      if (window.attChart) window.attChart.destroy();
       window.attChart = new Chart(ctx, {
         type: "bar",
-        data: { labels, datasets: [{ label:"Attendance Count", data:values, backgroundColor:"#0078d7" }] },
-        options: { responsive:true, plugins:{ legend:{display:false} }, scales:{ y:{ beginAtZero:true } } }
+        data: { labels, datasets: [{ label: "Attendance Count", data: values, backgroundColor: "#0078d7" }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
       });
     }
 
-    window.exportToExcel = function() {
+    window.exportToExcel = function () {
       const wb = XLSX.utils.book_new();
       const attTable = document.getElementById("attendanceTable");
       const ws1 = XLSX.utils.table_to_sheet(attTable);
@@ -218,37 +249,54 @@
       XLSX.utils.book_append_sheet(wb, ws2, "Class Summary");
 
       XLSX.writeFile(wb, "Attendance_Report.xlsx");
-    }
+    };
 
-    window.exportToPDF = function() {
+    window.exportToPDF = function () {
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF("p","pt");
-      doc.text("Attendance Report",40,40);
-      doc.autoTable({ html:"#attendanceTable", startY:70, styles:{ fontSize:8 }, theme:"grid", headStyles:{ fillColor:[0,120,215] } });
-      doc.addPage();
-      doc.text("Class Summary",40,40);
-      doc.autoTable({ html:"#classSummaryTable", startY:60, styles:{ fontSize:9 }, theme:"grid", headStyles:{ fillColor:[0,120,215] } });
-      doc.save("Attendance_Report.pdf");
-    }
+      const doc = new jsPDF("p", "pt");
+      doc.text("Attendance Report", 40, 40);
 
-    window.filterSearch = function() { applyFilters(); }
+      doc.autoTable({
+        html: "#attendanceTable",
+        startY: 70,
+        styles: { fontSize: 8 },
+        theme: "grid",
+        headStyles: { fillColor: [0, 120, 215] },
+      });
+
+      doc.addPage();
+      doc.text("Class Summary", 40, 40);
+      doc.autoTable({
+        html: "#classSummaryTable",
+        startY: 60,
+        styles: { fontSize: 9 },
+        theme: "grid",
+        headStyles: { fillColor: [0, 120, 215] },
+      });
+
+      doc.save("Attendance_Report.pdf");
+    };
+
+    window.filterSearch = function () {
+      applyFilters();
+    };
   </script>
 
   <style>
-    body { font-family: "Segoe UI", Arial, sans-serif; background:#f4f7f9; padding:20px; color:#333; }
-    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-    h1 { color:#0078d7; }
-    button, select, input { padding:8px 14px; border-radius:6px; border:1px solid #ccc; font-size:14px; }
-    button { background:#0078d7; color:white; border:none; cursor:pointer; font-weight:bold; }
-    button:hover { background:#005fa3; }
-    .logout-btn { background:#dc3545; } .logout-btn:hover { background:#b02a37; }
-    table { width:100%; border-collapse:collapse; background:white; border-radius:8px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.05); margin-top:15px; }
-    th, td { padding:12px; border-bottom:1px solid #ddd; text-align:left; }
-    th { background-color:#0078d7; color:white; }
-    tr:hover { background:#f9f9f9; }
-    .toolbar { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; align-items:center; }
-    canvas { margin-top:30px; background:white; padding:10px; border-radius:10px; }
-    .export-buttons { margin-top:20px; display:flex; gap:10px; }
+    body { font-family: "Segoe UI", Arial, sans-serif; background: #f4f7f9; padding: 20px; color: #333; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    h1 { color: #0078d7; }
+    button, select, input { padding: 8px 14px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+    button { background: #0078d7; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #005fa3; }
+    .logout-btn { background: #dc3545; } .logout-btn:hover { background: #b02a37; }
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-top: 15px; }
+    th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+    th { background-color: #0078d7; color: white; }
+    tr:hover { background: #f9f9f9; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; align-items:center; }
+    canvas { margin-top: 30px; background: white; padding: 10px; border-radius: 10px; }
+    .export-buttons { margin-top: 20px; display: flex; gap: 10px; }
   </style>
 </head>
 <body>
